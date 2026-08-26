@@ -1,3 +1,4 @@
+using Auran.Clinic.Infrastructure.Caching;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,8 @@ public static class DependencyInjection
             services.AddDbContext<AuranClinicDbContext>(options =>
                 options.UseSqlServer(connectionString));
         }
+
+        services.AddAuranCaching(configuration);
 
         return services;
     }
