@@ -86,7 +86,7 @@ Technical implementations:
 
 ## Technology
 
-- .NET 8
+- .NET 10 LTS
 - ASP.NET Core Web API
 - Entity Framework Core
 - SQL Server
@@ -129,7 +129,7 @@ public class BaseResponse<T> : BaseResponse where T : class
 }
 ```
 
-Pagination uses one shared application model:
+Pagination uses one standard application model:
 
 ```csharp
 public class PaginatedResponse<T>
@@ -143,7 +143,7 @@ public class PaginatedResponse<T>
 
 Prerequisites:
 
-- .NET 8 SDK
+- .NET 10 SDK
 - SQL Server
 
 Clone and build:
@@ -153,6 +153,7 @@ git clone https://github.com/Auran-Tech/auran-clinic-backend.git
 cd auran-clinic-backend
 dotnet restore
 dotnet build
+dotnet test
 ```
 
 Run the API:
@@ -163,9 +164,20 @@ dotnet run --project src/Auran.Clinic.Api
 
 Swagger is available in Development mode after the API starts.
 
+## Docker Development Stack
+
+The repository contains a multi-stage `Dockerfile` plus `docker-compose.yml` for API, SQL Server, and Redis.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Set a strong local SQL Server password in `.env` before starting the stack. Production secrets must be provided by the deployment environment and must not be committed.
+
 ## CI
 
-GitHub Actions restores, builds, and tests the full solution on pushes and pull requests to `main`.
+GitHub Actions restores, builds, tests, and publishes the API for pushes and pull requests to `main`.
 
 ## Repository Rules
 
