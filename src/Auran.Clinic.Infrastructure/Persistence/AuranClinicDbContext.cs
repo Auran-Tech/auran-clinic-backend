@@ -1,12 +1,45 @@
+using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using ClinicEntity = Auran.Clinic.Domain.Entities.Clinic;
+using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence;
 
 public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options)
     : DbContext(options)
 {
-    public DbSet<ClinicEntity> Clinics => Set<ClinicEntity>();
+    public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<Patient> Patients => Set<Patient>();
+    public DbSet<PatientCondition> PatientConditions => Set<PatientCondition>();
+    public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();
+    public DbSet<PatientMedication> PatientMedications => Set<PatientMedication>();
+    public DbSet<PatientProfileSection> PatientProfileSections => Set<PatientProfileSection>();
+    public DbSet<PatientProfileField> PatientProfileFields => Set<PatientProfileField>();
+    public DbSet<PatientProfileFieldOption> PatientProfileFieldOptions => Set<PatientProfileFieldOption>();
+    public DbSet<PatientProfileValue> PatientProfileValues => Set<PatientProfileValue>();
+    public DbSet<ClinicalField> ClinicalFields => Set<ClinicalField>();
+    public DbSet<ClinicalFieldOption> ClinicalFieldOptions => Set<ClinicalFieldOption>();
+    public DbSet<ClinicalMeasurement> ClinicalMeasurements => Set<ClinicalMeasurement>();
+    public DbSet<WorkflowStatus> WorkflowStatuses => Set<WorkflowStatus>();
+    public DbSet<WorkflowTransition> WorkflowTransitions => Set<WorkflowTransition>();
+    public DbSet<QueueEntry> QueueEntries => Set<QueueEntry>();
+    public DbSet<QueueStatusHistory> QueueStatusHistory => Set<QueueStatusHistory>();
+    public DbSet<Visit> Visits => Set<Visit>();
+    public DbSet<VisitSession> VisitSessions => Set<VisitSession>();
+    public DbSet<ClinicalOrderSectionDefinition> ClinicalOrderSectionDefinitions => Set<ClinicalOrderSectionDefinition>();
+    public DbSet<ClinicalOrder> ClinicalOrders => Set<ClinicalOrder>();
+    public DbSet<ClinicalOrderSection> ClinicalOrderSections => Set<ClinicalOrderSection>();
+    public DbSet<ClinicalOrderItem> ClinicalOrderItems => Set<ClinicalOrderItem>();
+    public DbSet<FileRecord> Files => Set<FileRecord>();
+    public DbSet<PatientAttachment> PatientAttachments => Set<PatientAttachment>();
+    public DbSet<ClinicalOrderAttachment> ClinicalOrderAttachments => Set<ClinicalOrderAttachment>();
+    public DbSet<FollowUp> FollowUps => Set<FollowUp>();
+    public DbSet<ClinicSettings> ClinicSettings => Set<ClinicSettings>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
