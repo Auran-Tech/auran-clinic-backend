@@ -1,0 +1,40 @@
+## .NET
+bin/
+obj/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## IDE
+.vs/
+.vscode/
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs
+logs/
+*.log
+
+## Secrets / local configuration
+secrets.json
+appsettings.Local.json
+.env
+.env.*
+
+## Coverage
+coverage/
+*.coverage
+*.coveragexml
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/

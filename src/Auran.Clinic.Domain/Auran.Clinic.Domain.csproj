@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Auran.Clinic.Domain</RootNamespace>
+    <AssemblyName>Auran.Clinic.Domain</AssemblyName>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.Api", "src\Auran.Clinic.Api\Auran.Clinic.Api.csproj", "{D2FADB47-D512-49E9-81B9-803CE41BFB3A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.Application", "src\Auran.Clinic.Application\Auran.Clinic.Application.csproj", "{65EB79E4-DD1D-49FC-9760-FD22FA8FC30A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.Domain", "src\Auran.Clinic.Domain\Auran.Clinic.Domain.csproj", "{4FA2FE9E-B13D-4246-8D6B-E7756A8F5D1D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.Infrastructure", "src\Auran.Clinic.Infrastructure\Auran.Clinic.Infrastructure.csproj", "{4575A914-484E-4A85-B46C-07E7DC966A01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.UnitTests", "tests\Auran.Clinic.UnitTests\Auran.Clinic.UnitTests.csproj", "{E160FE2E-1AA3-4BE7-B41F-05B5B799DBBF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auran.Clinic.IntegrationTests", "tests\Auran.Clinic.IntegrationTests\Auran.Clinic.IntegrationTests.csproj", "{F64955B1-2AF0-44F0-AEE5-48823D86851C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D2FADB47-D512-49E9-81B9-803CE41BFB3A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2FADB47-D512-49E9-81B9-803CE41BFB3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2FADB47-D512-49E9-81B9-803CE41BFB3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2FADB47-D512-49E9-81B9-803CE41BFB3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65EB79E4-DD1D-49FC-9760-FD22FA8FC30A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65EB79E4-DD1D-49FC-9760-FD22FA8FC30A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65EB79E4-DD1D-49FC-9760-FD22FA8FC30A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65EB79E4-DD1D-49FC-9760-FD22FA8FC30A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FA2FE9E-B13D-4246-8D6B-E7756A8F5D1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FA2FE9E-B13D-4246-8D6B-E7756A8F5D1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FA2FE9E-B13D-4246-8D6B-E7756A8F5D1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FA2FE9E-B13D-4246-8D6B-E7756A8F5D1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4575A914-484E-4A85-B46C-07E7DC966A01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4575A914-484E-4A85-B46C-07E7DC966A01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4575A914-484E-4A85-B46C-07E7DC966A01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4575A914-484E-4A85-B46C-07E7DC966A01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E160FE2E-1AA3-4BE7-B41F-05B5B799DBBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E160FE2E-1AA3-4BE7-B41F-05B5B799DBBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E160FE2E-1AA3-4BE7-B41F-05B5B799DBBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E160FE2E-1AA3-4BE7-B41F-05B5B799DBBF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F64955B1-2AF0-44F0-AEE5-48823D86851C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F64955B1-2AF0-44F0-AEE5-48823D86851C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F64955B1-2AF0-44F0-AEE5-48823D86851C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F64955B1-2AF0-44F0-AEE5-48823D86851C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

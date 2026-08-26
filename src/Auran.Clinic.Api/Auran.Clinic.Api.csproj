@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Auran.Clinic.Api</RootNamespace>
+    <AssemblyName>Auran.Clinic.Api</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Auran.Clinic.Application\Auran.Clinic.Application.csproj" />
+    <ProjectReference Include="..\Auran.Clinic.Infrastructure\Auran.Clinic.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

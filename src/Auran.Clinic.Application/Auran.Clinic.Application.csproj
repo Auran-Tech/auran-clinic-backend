@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Auran.Clinic.Application</RootNamespace>
+    <AssemblyName>Auran.Clinic.Application</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Auran.Clinic.Domain\Auran.Clinic.Domain.csproj" />
+  </ItemGroup>
+</Project>
