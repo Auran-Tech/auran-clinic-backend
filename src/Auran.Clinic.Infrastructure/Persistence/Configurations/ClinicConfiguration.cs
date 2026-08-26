@@ -1,12 +1,12 @@
-using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ClinicEntity = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
-public class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
+public class ClinicConfiguration : IEntityTypeConfiguration<ClinicEntity>
 {
-    public void Configure(EntityTypeBuilder<Clinic> builder)
+    public void Configure(EntityTypeBuilder<ClinicEntity> builder)
     {
         builder.ToTable("Clinics");
 

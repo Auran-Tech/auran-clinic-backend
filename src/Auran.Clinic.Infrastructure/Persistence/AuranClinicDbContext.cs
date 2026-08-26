@@ -1,12 +1,12 @@
-using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using ClinicEntity = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence;
 
 public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options)
     : DbContext(options)
 {
-    public DbSet<Clinic> Clinics => Set<Clinic>();
+    public DbSet<ClinicEntity> Clinics => Set<ClinicEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
