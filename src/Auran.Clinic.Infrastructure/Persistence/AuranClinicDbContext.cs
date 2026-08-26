@@ -10,10 +10,10 @@ public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options
     : IdentityDbContext<ApplicationIdentityUser>(options)
 {
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
+    public new DbSet<User> Users => Set<User>();
+    public new DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Patient> Patients => Set<Patient>();
