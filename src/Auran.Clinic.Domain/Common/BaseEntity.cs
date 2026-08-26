@@ -4,7 +4,11 @@ public abstract class BaseEntity
 {
     public Guid Id { get; set; }
 
-    public DateTime CreatedAtUtc { get; set; }
+    public DateTime CreatedDate { get; set; }
 
-    public DateTime? UpdatedAtUtc { get; set; }
+    public DateTime? UpdatedDate { get; set; }
+
+    public Guid? CreateByUserId { get; set; }
+
+    public Guid? UpdatedByUserId { get; set; }
 }
