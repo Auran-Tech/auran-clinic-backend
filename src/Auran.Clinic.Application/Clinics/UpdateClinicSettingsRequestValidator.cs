@@ -6,6 +6,18 @@ public sealed class UpdateClinicSettingsRequestValidator : AbstractValidator<Upd
 {
     public UpdateClinicSettingsRequestValidator()
     {
+        RuleFor(x => x.LogoUrl).MaximumLength(1000);
+        RuleFor(x => x.PrimaryColor).MaximumLength(32);
+        RuleFor(x => x.SecondaryColor).MaximumLength(32);
+        RuleFor(x => x.FontFamily).MaximumLength(100);
+        RuleFor(x => x.WelcomeTitle).MaximumLength(200);
+        RuleFor(x => x.WelcomeMessage).MaximumLength(2000);
+        RuleFor(x => x.WelcomeButtonText).MaximumLength(100);
+        RuleFor(x => x.TimeZoneId).MaximumLength(100);
+        RuleFor(x => x.PatientNumberPrefix)
+            .MaximumLength(20)
+            .Matches("^[A-Za-z0-9_-]+$")
+            .When(x => !string.IsNullOrWhiteSpace(x.PatientNumberPrefix));
         RuleFor(x => x.Phone).MaximumLength(50);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
         RuleFor(x => x.Address).MaximumLength(500);
@@ -14,6 +26,7 @@ public sealed class UpdateClinicSettingsRequestValidator : AbstractValidator<Upd
         RuleFor(x => x.DateFormat).MaximumLength(50);
         RuleFor(x => x.TimeFormat).MaximumLength(50);
         RuleFor(x => x.DocumentationReminderHours).InclusiveBetween(1, 168);
-        RuleFor(x => x.WelcomeButtonText).MaximumLength(100);
+        RuleFor(x => x.PrescriptionHeader).MaximumLength(2000);
+        RuleFor(x => x.PrescriptionFooter).MaximumLength(2000);
     }
 }

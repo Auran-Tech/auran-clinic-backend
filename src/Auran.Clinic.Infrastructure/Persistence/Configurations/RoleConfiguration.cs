@@ -1,6 +1,7 @@
 using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
@@ -12,7 +13,7 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(x => x.Code).HasMaxLength(128);
         builder.Property(x => x.Name).HasMaxLength(128);
 
-        builder.HasOne<Clinic>()
+        builder.HasOne<ClinicEntityType>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
