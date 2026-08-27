@@ -8,7 +8,8 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
 {
     public void Configure(EntityTypeBuilder<Role> builder)
     {
-        builder.HasIndex(x => x.Code).IsUnique();
+        builder.HasIndex(x => new { x.ClinicId, x.Code }).IsUnique();
         builder.Property(x => x.Code).HasMaxLength(128);
+        builder.Property(x => x.Name).HasMaxLength(128);
     }
 }
