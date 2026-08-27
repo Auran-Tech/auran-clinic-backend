@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
@@ -16,14 +17,15 @@ namespace Auran.Clinic.Infrastructure.Authentication;
 public sealed class AuthService(
     AuranClinicDbContext dbContext,
     UserManager<ApplicationIdentityUser> userManager,
-    IOptions<JwtOptions> jwtOptions) : IAuthService
+    IOptions<JwtOptions> jwtOptions,
+    IAuditService auditService) : IAuthService
 {
     private readonly JwtOptions _jwt = jwtOptions.Value;
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var identityUser = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (identityUser is null || !await userManager.CheckPasswordAsync(identityUser, request.Password))
+        if (identityUser is null)
             return null;
 
         var user = await dbContext.Users.AsNoTracking()
@@ -31,7 +33,53 @@ public sealed class AuthService(
         if (user is null)
             return null;
 
-        return await CreateSessionAsync(user, identityUser, cancellationToken);
+        if (!await userManager.CheckPasswordAsync(identityUser, request.Password))
+        {
+            await auditService.WriteAsync(new AuditEvent
+            {
+                ClinicId = user.ClinicId,
+                ActorUserId = user.Id,
+                Action = "Authentication.LoginFailed",
+                Category = "Security",
+                EntityType = nameof(User),
+                EntityId = user.Id.ToString(),
+                Description = "Login failed because the supplied credentials were invalid."
+            }, cancellationToken);
+            return null;
+        }
+
+        var clinicIsActive = await dbContext.Clinics.AsNoTracking()
+            .Where(x => x.Id == user.ClinicId)
+            .Select(x => x.IsActive)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!clinicIsActive)
+        {
+            await auditService.WriteAsync(new AuditEvent
+            {
+                ClinicId = user.ClinicId,
+                ActorUserId = user.Id,
+                Action = "Authentication.LoginBlocked",
+                Category = "Security",
+                EntityType = nameof(User),
+                EntityId = user.Id.ToString(),
+                Description = "Login was blocked because the clinic is inactive."
+            }, cancellationToken);
+            return null;
+        }
+
+        var response = await CreateSessionAsync(user, identityUser, cancellationToken);
+        await auditService.WriteAsync(new AuditEvent
+        {
+            ClinicId = user.ClinicId,
+            ActorUserId = user.Id,
+            Action = "Authentication.LoginSucceeded",
+            Category = "Security",
+            EntityType = nameof(User),
+            EntityId = user.Id.ToString(),
+            Description = "User signed in successfully."
+        }, cancellationToken);
+
+        return response;
     }
 
     public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
@@ -40,10 +88,34 @@ public sealed class AuthService(
         var refreshToken = await dbContext.RefreshTokens
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
-        if (refreshToken is null || !refreshToken.IsActive)
+        if (refreshToken is null)
             return null;
 
-        var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId, cancellationToken);
+        if (!refreshToken.IsActive)
+        {
+            await auditService.WriteAsync(new AuditEvent
+            {
+                ClinicId = refreshToken.ClinicId,
+                ActorUserId = refreshToken.UserId,
+                Action = "Authentication.RefreshFailed",
+                Category = "Security",
+                EntityType = nameof(RefreshToken),
+                EntityId = refreshToken.Id.ToString(),
+                Description = "Refresh token reuse or expiry was rejected."
+            }, cancellationToken);
+            return null;
+        }
+
+        var clinicIsActive = await dbContext.Clinics.AsNoTracking()
+            .Where(x => x.Id == refreshToken.ClinicId)
+            .Select(x => x.IsActive)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!clinicIsActive)
+            return null;
+
+        var user = await dbContext.Users.SingleOrDefaultAsync(
+            x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
+            cancellationToken);
         if (user is null)
             return null;
 
@@ -55,6 +127,18 @@ public sealed class AuthService(
         var response = await CreateSessionAsync(user, identityUser, cancellationToken, saveChanges: false);
         refreshToken.ReplacedByTokenHash = HashToken(response.RefreshToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditService.WriteAsync(new AuditEvent
+        {
+            ClinicId = user.ClinicId,
+            ActorUserId = user.Id,
+            Action = "Authentication.TokenRefreshed",
+            Category = "Security",
+            EntityType = nameof(User),
+            EntityId = user.Id.ToString(),
+            Description = "Access and refresh tokens were rotated successfully."
+        }, cancellationToken);
+
         return response;
     }
 
@@ -67,9 +151,24 @@ public sealed class AuthService(
 
         entity.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditService.WriteAsync(new AuditEvent
+        {
+            ClinicId = entity.ClinicId,
+            ActorUserId = entity.UserId,
+            Action = "Authentication.Logout",
+            Category = "Security",
+            EntityType = nameof(User),
+            EntityId = entity.UserId.ToString(),
+            Description = "User refresh token was revoked during logout."
+        }, cancellationToken);
     }
 
-    private async Task<AuthResponse> CreateSessionAsync(User user, ApplicationIdentityUser identityUser, CancellationToken cancellationToken, bool saveChanges = true)
+    private async Task<AuthResponse> CreateSessionAsync(
+        User user,
+        ApplicationIdentityUser identityUser,
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         var roleIds = await dbContext.UserRoles.AsNoTracking()
             .Where(x => x.ClinicId == user.ClinicId && x.UserId == user.Id)
@@ -77,7 +176,7 @@ public sealed class AuthService(
             .ToListAsync(cancellationToken);
 
         var roles = await dbContext.Roles.AsNoTracking()
-            .Where(x => roleIds.Contains(x.Id))
+            .Where(x => x.ClinicId == user.ClinicId && roleIds.Contains(x.Id))
             .Select(x => x.Code)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -86,7 +185,7 @@ public sealed class AuthService(
             ? new List<string>()
             : await (from rolePermission in dbContext.RolePermissions.AsNoTracking()
                      join permission in dbContext.Permissions.AsNoTracking() on rolePermission.PermissionId equals permission.Id
-                     where roleIds.Contains(rolePermission.RoleId)
+                     where rolePermission.ClinicId == user.ClinicId && roleIds.Contains(rolePermission.RoleId)
                      select permission.Code)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -124,7 +223,12 @@ public sealed class AuthService(
         };
     }
 
-    private string CreateAccessToken(User user, ApplicationIdentityUser identityUser, IEnumerable<string> roles, IEnumerable<string> permissions, DateTime expiresDate)
+    private string CreateAccessToken(
+        User user,
+        ApplicationIdentityUser identityUser,
+        IEnumerable<string> roles,
+        IEnumerable<string> permissions,
+        DateTime expiresDate)
     {
         var claims = new List<Claim>
         {
