@@ -8,7 +8,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     public async Task SwaggerDocument_ExposesStableAuthenticationOperations()
     {
         using var client = factory.CreateClient();
-        var paths = await GetPathsAsync(client);
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
         Assert.Equal("Auth_Login", GetOperationId(paths, "/api/auth/login", "post"));
         Assert.Equal("Auth_RefreshToken", GetOperationId(paths, "/api/auth/refresh", "post"));
@@ -19,10 +19,24 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     }
 
     [Fact]
+    public async Task SwaggerDocument_MarksAnonymousAuthenticationOperationsAsAnonymous()
+    {
+        using var client = factory.CreateClient();
+        var document = await GetDocumentAsync(client);
+        var paths = document.GetProperty("paths");
+
+        Assert.True(document.GetProperty("security").GetArrayLength() > 0);
+        Assert.Equal(0, GetOperation(paths, "/api/auth/login", "post").GetProperty("security").GetArrayLength());
+        Assert.Equal(0, GetOperation(paths, "/api/auth/refresh", "post").GetProperty("security").GetArrayLength());
+        Assert.Equal(0, GetOperation(paths, "/api/platform/auth/login", "post").GetProperty("security").GetArrayLength());
+        Assert.Equal(0, GetOperation(paths, "/api/platform/auth/refresh", "post").GetProperty("security").GetArrayLength());
+    }
+
+    [Fact]
     public async Task SwaggerDocument_ExposesStablePlatformClinicOperations()
     {
         using var client = factory.CreateClient();
-        var paths = await GetPathsAsync(client);
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
         Assert.Equal("PlatformClinics_Search", GetOperationId(paths, "/api/platform/clinics", "get"));
         Assert.Equal("PlatformClinics_Create", GetOperationId(paths, "/api/platform/clinics", "post"));
@@ -38,7 +52,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     public async Task SwaggerDocument_ExposesStableClinicSelfServiceOperations()
     {
         using var client = factory.CreateClient();
-        var paths = await GetPathsAsync(client);
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
         Assert.Equal("Clinic_GetCurrent", GetOperationId(paths, "/api/clinic", "get"));
         Assert.Equal("ClinicSettings_Get", GetOperationId(paths, "/api/clinic/settings", "get"));
@@ -47,15 +61,18 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal("AuditLogs_Search", GetOperationId(paths, "/api/audit-logs", "get"));
     }
 
-    private static async Task<JsonElement> GetPathsAsync(HttpClient client)
+    private static async Task<JsonElement> GetDocumentAsync(HttpClient client)
     {
         var response = await client.GetAsync("/swagger/v1/swagger.json");
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
-        return document.RootElement.GetProperty("paths").Clone();
+        return document.RootElement.Clone();
     }
 
+    private static JsonElement GetOperation(JsonElement paths, string path, string method) =>
+        paths.GetProperty(path).GetProperty(method);
+
     private static string? GetOperationId(JsonElement paths, string path, string method) =>
-        paths.GetProperty(path).GetProperty(method).GetProperty("operationId").GetString();
+        GetOperation(paths, path, method).GetProperty("operationId").GetString();
 }
