@@ -28,7 +28,7 @@ public sealed class ClinicController(
     }
 
     [HttpGet("settings")]
-    [Authorize(Policy = PermissionPolicy.ForClinic(Permissions.Clinic.Settings.View))]
+    [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Settings.View)]
     [SwaggerOperation(Summary = "Get current clinic settings", Description = "Returns branding, localization, patient-numbering, welcome-page, prescription and reminder settings for the authenticated clinic only.", OperationId = "ClinicSettings_Get", Tags = new[] { "Clinic" })]
     public async Task<ActionResult<BaseResponse<ClinicSettingsResponse>>> GetSettings(CancellationToken cancellationToken)
     {
@@ -39,7 +39,7 @@ public sealed class ClinicController(
     }
 
     [HttpPut("settings")]
-    [Authorize(Policy = PermissionPolicy.ForClinic(Permissions.Clinic.Settings.Manage))]
+    [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Settings.Manage)]
     [SwaggerOperation(Summary = "Update current clinic settings", Description = "Updates configurable settings for the authenticated clinic only. ClinicId is never accepted from the request and all mutations are centrally audited.", OperationId = "ClinicSettings_Update", Tags = new[] { "Clinic" })]
     public async Task<ActionResult<BaseResponse<ClinicSettingsResponse>>> UpdateSettings([FromBody] UpdateClinicSettingsRequest request, CancellationToken cancellationToken)
     {
