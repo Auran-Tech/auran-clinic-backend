@@ -4,6 +4,7 @@ using Auran.Clinic.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Auran.Clinic.Infrastructure.Authorization;
 
