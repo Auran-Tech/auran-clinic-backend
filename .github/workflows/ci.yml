@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-test:
@@ -28,21 +28,31 @@ jobs:
       - name: Install dotnet-ef
         run: dotnet tool install --global dotnet-ef --version 10.0.11
 
-      - name: Generate platform clinic foundation migration
+      - name: Generate platform clinic foundation migration when missing
+        id: migration
         env:
           ASPNETCORE_ENVIRONMENT: Development
-        run: >-
-          dotnet ef migrations add PlatformClinicFoundation
-          --project src/Auran.Clinic.Infrastructure
-          --startup-project src/Auran.Clinic.Api
-          --context AuranClinicDbContext
-          --output-dir Persistence/Migrations
+        run: |
+          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -maxdepth 1 -name '*_PlatformClinicFoundation.cs' | grep -q .; then
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: Upload generated migrations
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-migrations
-          path: src/Auran.Clinic.Infrastructure/Persistence/Migrations/
+          dotnet ef migrations add PlatformClinicFoundation \
+            --project src/Auran.Clinic.Infrastructure \
+            --startup-project src/Auran.Clinic.Api \
+            --context AuranClinicDbContext \
+            --output-dir Persistence/Migrations
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit generated migration to PR branch
+        if: steps.migration.outputs.generated == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
+          git commit -m "chore: add platform clinic foundation migration"
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
