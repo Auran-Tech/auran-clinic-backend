@@ -15,21 +15,24 @@ public static class CachingServiceCollectionExtensions
         if (provider.Equals(CacheProviders.Redis, StringComparison.OrdinalIgnoreCase))
         {
             var connectionString = configuration[$"{CacheOptions.SectionName}:Redis:ConnectionString"];
-            var instanceName = configuration[$"{CacheOptions.SectionName}:Redis:InstanceName"]
-                ?? "AuranClinic:";
 
-            if (string.IsNullOrWhiteSpace(connectionString))
+            if (!string.IsNullOrWhiteSpace(connectionString))
             {
-                throw new InvalidOperationException(
-                    "Cache:Redis:ConnectionString is required when Cache:Provider is Redis.");
+                var instanceName = configuration[$"{CacheOptions.SectionName}:Redis:InstanceName"]
+                    ?? "AuranClinic:";
+
+                services.AddStackExchangeRedisCache(redis =>
+                {
+                    redis.Configuration = connectionString;
+                    redis.InstanceName = instanceName;
+                });
+
+                return services;
             }
 
-            services.AddStackExchangeRedisCache(redis =>
-            {
-                redis.Configuration = connectionString;
-                redis.InstanceName = instanceName;
-            });
-
+            // Redis is optional. Local/development environments must remain runnable
+            // without a Redis server or connection string.
+            services.AddDistributedMemoryCache();
             return services;
         }
 
