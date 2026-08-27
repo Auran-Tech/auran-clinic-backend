@@ -27,8 +27,10 @@ public sealed class ClinicService(
 
         var settings = await dbContext.ClinicSettings.AsNoTracking()
             .SingleOrDefaultAsync(x => x.ClinicId == clinic.Id, cancellationToken);
-        var admin = await GetInitialAdminAsync(clinic.Id, cancellationToken);
-        return MapDetails(clinic, settings, admin);
+
+        // Initial Admin contact details are platform-management data and are not
+        // exposed through the general clinic context endpoint.
+        return MapDetails(clinic, settings, admin: null);
     }
 
     public async Task<ClinicSettingsResponse?> GetSettingsAsync(CancellationToken cancellationToken = default)
@@ -115,30 +117,6 @@ public sealed class ClinicService(
         return await clinicAccessService.IsClinicActiveAsync(currentActor.ClinicId.Value, cancellationToken)
             ? currentActor.ClinicId.Value
             : null;
-    }
-
-    private async Task<InitialAdminResponse?> GetInitialAdminAsync(Guid clinicId, CancellationToken cancellationToken)
-    {
-        var adminRoleId = await dbContext.Roles.AsNoTracking()
-            .Where(x => x.ClinicId == clinicId && x.Code == Application.Authorization.SystemRoleCatalog.Admin)
-            .Select(x => x.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (adminRoleId == Guid.Empty)
-            return null;
-
-        return await (from userRole in dbContext.UserRoles.AsNoTracking()
-                      join user in dbContext.Users.AsNoTracking() on userRole.UserId equals user.Id
-                      where userRole.ClinicId == clinicId && userRole.RoleId == adminRoleId
-                      orderby user.CreatedDate
-                      select new InitialAdminResponse
-                      {
-                          UserId = user.Id,
-                          FullName = user.FullName,
-                          Email = user.Email ?? string.Empty,
-                          Phone = user.Phone,
-                          Role = Application.Authorization.SystemRoleCatalog.Admin
-                      })
-            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyCollection<ClinicFeatureResponse>> MapFeaturesAsync(
