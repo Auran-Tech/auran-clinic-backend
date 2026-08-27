@@ -17,8 +17,7 @@
       "applicationUrl": "https://localhost:7180;http://localhost:5180",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DOTNET_ENVIRONMENT": "Development",
-        "Cache__Provider": "Memory"
+        "DOTNET_ENVIRONMENT": "Development"
       }
     },
     "Auran.Clinic.Api.Http": {
@@ -29,8 +28,7 @@
       "applicationUrl": "http://localhost:5180",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DOTNET_ENVIRONMENT": "Development",
-        "Cache__Provider": "Memory"
+        "DOTNET_ENVIRONMENT": "Development"
       }
     },
     "IIS Express": {
@@ -39,8 +37,7 @@
       "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DOTNET_ENVIRONMENT": "Development",
-        "Cache__Provider": "Memory"
+        "DOTNET_ENVIRONMENT": "Development"
       }
     }
   }
