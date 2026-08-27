@@ -2,6 +2,7 @@ namespace Auran.Clinic.Application.Auditing;
 
 public sealed class AuditLogSearchRequest
 {
+    public Guid? ClinicId { get; set; }
     public Guid? UserId { get; set; }
     public string? Action { get; set; }
     public string? Category { get; set; }
