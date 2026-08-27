@@ -81,16 +81,15 @@ public sealed class AuditService(
             query = query.Where(x => x.OccurredAtUtc <= request.ToUtc.Value);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var logs = await query
+        var entities = await query
             .OrderByDescending(x => x.OccurredAtUtc)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => Map(x))
             .ToListAsync(cancellationToken);
 
         return new PaginatedResponse<AuditLogResponse>
         {
-            Data = logs,
+            Data = entities.Select(Map).ToList(),
             Setting = new PaginationInfo
             {
                 TotalCount = totalCount,
@@ -104,10 +103,9 @@ public sealed class AuditService(
         Guid auditLogId,
         CancellationToken cancellationToken = default)
     {
-        return await ApplyVisibility(dbContext.AuditLogs.AsNoTracking())
-            .Where(x => x.Id == auditLogId)
-            .Select(x => Map(x))
-            .SingleOrDefaultAsync(cancellationToken);
+        var entity = await ApplyVisibility(dbContext.AuditLogs.AsNoTracking())
+            .SingleOrDefaultAsync(x => x.Id == auditLogId, cancellationToken);
+        return entity is null ? null : Map(entity);
     }
 
     private IQueryable<AuditLog> ApplyVisibility(IQueryable<AuditLog> query)
@@ -117,8 +115,6 @@ public sealed class AuditService(
 
         if (currentActor.ActorType == ActorType.Platform)
         {
-            // Platform administration can inspect platform events and clinic-management
-            // events performed by platform actors, but not clinic-user clinical activity.
             return query.Where(x =>
                 x.Scope == AuditScope.Platform ||
                 (x.Scope == AuditScope.Clinic && x.ActorType == ActorType.Platform));
