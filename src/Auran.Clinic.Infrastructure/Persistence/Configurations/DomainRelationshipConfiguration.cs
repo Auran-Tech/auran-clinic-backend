@@ -1,6 +1,7 @@
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
+using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
@@ -11,7 +12,7 @@ public static class DomainRelationshipConfiguration
         ConfigureClinicRelationships(modelBuilder);
 
         modelBuilder.Entity<ClinicSettings>()
-            .HasOne<Domain.Entities.Clinic>()
+            .HasOne<ClinicEntityType>()
             .WithOne()
             .HasForeignKey<ClinicSettings>(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
@@ -96,7 +97,7 @@ public static class DomainRelationshipConfiguration
         where TEntity : ClinicEntity
     {
         modelBuilder.Entity<TEntity>()
-            .HasOne<Domain.Entities.Clinic>()
+            .HasOne<ClinicEntityType>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
