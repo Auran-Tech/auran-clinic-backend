@@ -2,64 +2,116 @@
 
 ## Purpose
 
-This feature establishes the authentication and authorization foundation for Auran Clinic. It is intentionally clinic-aware from the beginning so future modules can rely on a consistent user, clinic and permission context.
+AURAN Clinic has two intentionally separate security scopes: the AURAN platform and an individual clinic tenant. A Platform Admin is not a clinic Super User, and a clinic Super User must never gain platform or cross-tenant access.
 
-## Authentication model
+## Identity model
 
-- ASP.NET Core Identity stores credentials and password hashes.
-- The domain `User` remains the business user record and references the Identity user through `IdentityUserId`.
-- Login returns a short-lived JWT access token and a rotating refresh token.
-- Refresh tokens are stored as SHA-256 hashes; raw refresh tokens are returned only to the client.
-- Refresh token rotation revokes the consumed token and creates a replacement.
-- Logout revokes the supplied refresh token.
+ASP.NET Core Identity is the shared credential store. `ApplicationIdentityUser.AccountType` is persisted as a string and identifies whether an Identity account is `Platform` or `Clinic`.
 
-## JWT claims
+Business identities remain separate:
 
-Access tokens contain `user_id`, `clinic_id`, `super_user`, role claims and permission claims. This allows normal API authorization to avoid a database query on every request.
-
-## RBAC rules
-
-- A user may have multiple roles through `UserRole`.
-- Roles aggregate permissions through `RolePermission`.
-- System roles are platform-defined. Their identity and permissions are not intended to be renamed, deleted or edited through clinic administration.
-- A Super User bypasses permission checks and is expected to see every page and capability inside the clinic.
-- Normal users receive the union of permissions from all assigned roles.
-- Permission policy names use `Permission:<PermissionCode>`, for example `Permission:Patients.View`.
-
-## Multi-clinic boundary
-
-The authenticated token carries `ClinicId`. Application services must always scope clinic-owned data using the authenticated clinic context. A client-supplied ClinicId must never be trusted as the authorization boundary.
-
-## Refresh token lifecycle
-
-1. Successful login creates a cryptographically random refresh token.
-2. Only its SHA-256 hash is persisted.
-3. Refresh validates that the token exists, belongs to an active user and has not expired/revoked.
-4. The old token is revoked and replaced atomically.
-5. A new access token and refresh token are returned.
-
-## Permission usage
-
-```csharp
-[Authorize(Policy = PermissionPolicy.For(Permissions.Patients.View))]
+```text
+Identity account (AccountType=Platform) -> PlatformUser
+Identity account (AccountType=Clinic)   -> User -> Clinic
 ```
 
-Super users satisfy every permission requirement automatically.
+A fake AURAN clinic is never used to represent platform administrators.
+
+## Platform authentication
+
+Platform authentication uses `/api/platform/auth/*`. Platform JWTs contain:
+
+- `actor_type=Platform`
+- `platform_user_id`
+- `platform_role`
+- `platform_permission`
+- identity/display claims
+
+A platform token does not contain `clinic_id` and cannot satisfy clinic-actor authorization policies.
+
+The initial Platform Admin is created only through the deployment-time Platform Bootstrap process. There is no public platform registration endpoint. Bootstrap credentials must come from environment/secret configuration.
+
+## Clinic authentication
+
+Clinic authentication remains under `/api/auth/*`. Clinic JWTs contain:
+
+- `actor_type=Clinic`
+- `clinic_user_id`
+- `clinic_id`
+- `clinic_super_user`
+- `clinic_role`
+- `clinic_permission`
+- identity/display claims
+
+Login and refresh are rejected when the clinic is inactive. Protected clinic requests also pass through the clinic actor guard, so suspension applies to already-issued access tokens after the clinic-status cache is invalidated.
+
+## Refresh tokens
+
+Platform and clinic refresh tokens use separate persistence models. Both use cryptographically random raw tokens, persist only SHA-256 hashes, revoke consumed tokens during rotation, and create replacement tokens. Raw refresh tokens are returned only to the client.
+
+## Authorization scopes
+
+Permission policies are explicit about scope:
+
+```csharp
+[Authorize(Policy = PermissionPolicy.ForPlatform(Permissions.Platform.Clinics.Create))]
+[Authorize(Policy = PermissionPolicy.ForClinic(Permissions.Clinic.Patients.View))]
+```
+
+Platform permissions use the `PlatformPermission:` policy prefix. Clinic permissions use `ClinicPermission:`.
+
+The dynamic policy provider also requires the matching actor requirement, so a clinic token cannot satisfy a platform permission even if a claim name is manipulated or a similarly named permission exists.
+
+## Platform RBAC
+
+Platform RBAC is separate from clinic RBAC:
+
+```text
+PlatformUser -> PlatformUserRole -> PlatformRole -> PlatformRolePermission -> Permission(scope=Platform)
+```
+
+The initial protected role is `PLATFORM_ADMIN`. The model can later support Platform Support, Sales or Operations without changing clinic RBAC.
+
+Current platform permissions cover clinic viewing/provisioning/updating/status, clinic feature management, platform audit and future platform-user management.
+
+## Clinic RBAC
+
+Clinic RBAC remains tenant scoped:
+
+```text
+User -> UserRole -> Role -> RolePermission -> Permission(scope=Clinic)
+```
+
+Protected clinic roles are Admin, Receptionist, Doctor and Nurse. A clinic user may have multiple roles and receives the union of their role permissions.
+
+`IsClinicSuperUser` bypasses clinic permission checks only after the request is proven to be an authenticated, active clinic actor. It never bypasses platform authorization and never grants access to another clinic.
+
+## Tenant boundary
+
+Clinic-owned data is scoped by the authenticated `clinic_id`. Clinic-facing endpoints do not accept an arbitrary clinic id as their authorization boundary. For example, clinic settings are exposed as `/api/clinic/settings`, while cross-tenant clinic lifecycle operations are exposed only under `/api/platform/clinics`.
+
+Platform administration does not imply access to patient or clinical records. Future support access must be an explicit, time-bound and fully audited mechanism rather than an implicit Platform Admin capability.
+
+## Features versus permissions
+
+Feature entitlement and user permission are separate checks:
+
+```text
+Clinic active -> Feature enabled -> User permission -> Endpoint
+```
+
+Features are controlled by AURAN platform administration. Clinic users can read their feature availability but cannot change it. Feature state is read through the centralized clinic-access service and cached through the configured distributed cache.
+
+## Security audit
+
+Authentication success/failure, token rotation, logout and authorization denials are audited. Platform and clinic actor identity is captured as an immutable snapshot in audit records. Passwords, tokens, signing keys, connection strings and other secrets are redacted and must never be persisted in audit metadata.
 
 ## Configuration
 
-`Jwt` settings contain Issuer, Audience, SigningKey, AccessTokenMinutes and RefreshTokenDays. Production signing keys must be provided through environment/secret configuration and must not be committed to source control.
+`Jwt` contains Issuer, Audience, SigningKey, AccessTokenMinutes and RefreshTokenDays. The repository does not contain a production signing key. Development has a development-only key; production must supply `Jwt__SigningKey` from secret/environment configuration.
 
-## Security notes
+`PlatformBootstrap` is disabled by default. When deliberately enabled for first deployment, `FullName`, `Email` and `Password` must be supplied securely. After a Platform user exists, bootstrap remains idempotent and does not create duplicate administrators.
 
-- Passwords are never stored in the domain user table.
-- ASP.NET Core Identity owns password hashing and verification.
-- Refresh tokens are never stored in plaintext.
-- JWT signing keys must be secret-managed in production.
-- Authentication is not a replacement for clinic-scoped queries; tenant isolation must still be enforced in services/repositories.
+## Deferred security features
 
-## V1 scope
-
-Included: login, JWT generation, refresh token rotation, logout/revocation, current-user context, multiple roles per user, permission claims, dynamic permission policies and Super User bypass.
-
-Not included yet: MFA, password reset/email delivery, account invitation workflow, external identity providers, owner subscription portal, cross-clinic user switching and patient mobile authentication.
+MFA, password reset/email delivery, invitation workflows, external identity providers, platform support impersonation/break-glass access, subscriptions/billing and cross-clinic account switching are deferred until explicitly designed.
