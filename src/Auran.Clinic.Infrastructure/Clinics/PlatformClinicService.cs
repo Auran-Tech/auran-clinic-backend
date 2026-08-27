@@ -311,6 +311,7 @@ public sealed class PlatformClinicService(
         var existing = await dbContext.ClinicFeatures
             .Where(x => x.ClinicId == clinicId)
             .ToDictionaryAsync(x => x.FeatureDefinitionId, cancellationToken);
+        var affectedFeatureCodes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var item in request.Features)
         {
@@ -322,10 +323,13 @@ public sealed class PlatformClinicService(
             }
             mapping.IsEnabled = item.IsEnabled;
             mapping.ConfigurationJson = Clean(item.ConfigurationJson);
-            await clinicAccessService.InvalidateFeatureAsync(clinicId, definition.Code, cancellationToken);
+            affectedFeatureCodes.Add(definition.Code);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (var featureCode in affectedFeatureCodes)
+            await clinicAccessService.InvalidateFeatureAsync(clinicId, featureCode, cancellationToken);
+
         await auditService.WriteAsync(new AuditEvent
         {
             Scope = AuditScope.Clinic,
