@@ -17,6 +17,16 @@ public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options
     public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<PlatformUser> PlatformUsers => Set<PlatformUser>();
+    public DbSet<PlatformRole> PlatformRoles => Set<PlatformRole>();
+    public DbSet<PlatformUserRole> PlatformUserRoles => Set<PlatformUserRole>();
+    public DbSet<PlatformRolePermission> PlatformRolePermissions => Set<PlatformRolePermission>();
+    public DbSet<PlatformRefreshToken> PlatformRefreshTokens => Set<PlatformRefreshToken>();
+
+    public DbSet<FeatureDefinition> FeatureDefinitions => Set<FeatureDefinition>();
+    public DbSet<ClinicFeature> ClinicFeatures => Set<ClinicFeature>();
+
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<PatientCondition> PatientConditions => Set<PatientCondition>();
     public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();

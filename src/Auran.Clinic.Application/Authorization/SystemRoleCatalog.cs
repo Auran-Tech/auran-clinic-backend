@@ -2,55 +2,57 @@ namespace Auran.Clinic.Application.Authorization;
 
 public static class SystemRoleCatalog
 {
-    public const string Admin = "Admin";
-    public const string Receptionist = "Receptionist";
-    public const string Doctor = "Doctor";
-    public const string Nurse = "Nurse";
+    public const string Admin = "ADMIN";
+    public const string Receptionist = "RECEPTIONIST";
+    public const string Doctor = "DOCTOR";
+    public const string Nurse = "NURSE";
 
-    private static readonly string[] AdminPermissions = SystemPermissionCatalog.All
-        .Select(x => x.Code)
-        .Where(x => x != Permissions.Clinics.Create)
-        .ToArray();
+    private static readonly string[] AllClinicPermissions =
+        SystemPermissionCatalog.Clinic.Select(x => x.Code).ToArray();
 
-    public static IReadOnlyList<SystemRoleDefinition> All { get; } = new List<SystemRoleDefinition>
+    public static readonly IReadOnlyCollection<SystemRoleDefinition> All = new[]
     {
-        new(Admin, "Admin", AdminPermissions),
-        new(Receptionist, "Receptionist", new[]
-        {
-            Permissions.Clinics.View,
-            Permissions.Clinics.SettingsView,
-            Permissions.Patients.View,
-            Permissions.Patients.Create,
-            Permissions.Patients.Update,
-            Permissions.Queue.View,
-            Permissions.Queue.Manage,
-            Permissions.Visits.View,
-            Permissions.Visits.Create,
-            Permissions.FollowUps.View
-        }),
-        new(Doctor, "Doctor", new[]
-        {
-            Permissions.Clinics.View,
-            Permissions.Patients.View,
-            Permissions.Queue.View,
-            Permissions.Visits.View,
-            Permissions.Visits.Create,
-            Permissions.Visits.Update,
-            Permissions.Clinical.View,
-            Permissions.Clinical.Manage,
-            Permissions.FollowUps.View,
-            Permissions.FollowUps.Manage,
-            Permissions.Reports.View
-        }),
-        new(Nurse, "Nurse", new[]
-        {
-            Permissions.Clinics.View,
-            Permissions.Patients.View,
-            Permissions.Queue.View,
-            Permissions.Visits.View,
-            Permissions.Clinical.View,
-            Permissions.Clinical.Manage,
-            Permissions.FollowUps.View
-        })
+        new SystemRoleDefinition(Admin, "Admin", AllClinicPermissions),
+        new SystemRoleDefinition(
+            Receptionist,
+            "Receptionist",
+            new[]
+            {
+                Permissions.Clinic.Patients.View,
+                Permissions.Clinic.Patients.Create,
+                Permissions.Clinic.Patients.Update,
+                Permissions.Clinic.Queue.View,
+                Permissions.Clinic.Queue.Manage,
+                Permissions.Clinic.Visits.View,
+                Permissions.Clinic.Visits.Create,
+                Permissions.Clinic.FollowUps.View
+            }),
+        new SystemRoleDefinition(
+            Doctor,
+            "Doctor",
+            new[]
+            {
+                Permissions.Clinic.Patients.View,
+                Permissions.Clinic.Visits.View,
+                Permissions.Clinic.Visits.Create,
+                Permissions.Clinic.Visits.Update,
+                Permissions.Clinic.Clinical.View,
+                Permissions.Clinic.Clinical.Manage,
+                Permissions.Clinic.FollowUps.View,
+                Permissions.Clinic.FollowUps.Manage,
+                Permissions.Clinic.Reports.View
+            }),
+        new SystemRoleDefinition(
+            Nurse,
+            "Nurse",
+            new[]
+            {
+                Permissions.Clinic.Patients.View,
+                Permissions.Clinic.Queue.View,
+                Permissions.Clinic.Queue.Manage,
+                Permissions.Clinic.Visits.View,
+                Permissions.Clinic.Clinical.View,
+                Permissions.Clinic.Clinical.Manage
+            })
     };
 }

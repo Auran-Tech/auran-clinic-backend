@@ -1,35 +1,45 @@
+using Auran.Clinic.Domain.Enums;
+
 namespace Auran.Clinic.Application.Authorization;
 
 public static class SystemPermissionCatalog
 {
-    public static IReadOnlyList<PermissionDefinition> All { get; } = new List<PermissionDefinition>
+    public static readonly IReadOnlyCollection<PermissionDefinition> All = new[]
     {
-        new(Permissions.Clinics.View, "View clinic", "Clinics"),
-        new(Permissions.Clinics.Create, "Create clinic", "Clinics"),
-        new(Permissions.Clinics.Update, "Update clinic", "Clinics"),
-        new(Permissions.Clinics.Activate, "Activate or deactivate clinic", "Clinics"),
-        new(Permissions.Clinics.SettingsView, "View clinic settings", "Clinics"),
-        new(Permissions.Clinics.SettingsUpdate, "Update clinic settings", "Clinics"),
-        new(Permissions.AuditLogs.View, "View audit logs", "Audit"),
-        new(Permissions.Users.View, "View users", "Users"),
-        new(Permissions.Users.Manage, "Manage users", "Users"),
-        new(Permissions.Roles.View, "View roles", "Roles"),
-        new(Permissions.Roles.Manage, "Manage roles", "Roles"),
-        new(Permissions.Patients.View, "View patients", "Patients"),
-        new(Permissions.Patients.Create, "Create patients", "Patients"),
-        new(Permissions.Patients.Update, "Update patients", "Patients"),
-        new(Permissions.Queue.View, "View live queue", "Queue"),
-        new(Permissions.Queue.Manage, "Manage live queue", "Queue"),
-        new(Permissions.Visits.View, "View visits", "Visits"),
-        new(Permissions.Visits.Create, "Create visits", "Visits"),
-        new(Permissions.Visits.Update, "Update visits", "Visits"),
-        new(Permissions.Clinical.View, "View clinical data", "Clinical"),
-        new(Permissions.Clinical.Manage, "Manage clinical data", "Clinical"),
-        new(Permissions.FollowUps.View, "View follow-ups", "FollowUps"),
-        new(Permissions.FollowUps.Manage, "Manage follow-ups", "FollowUps"),
-        new(Permissions.Reports.View, "View reports", "Reports"),
-        new(Permissions.Reports.Export, "Export reports", "Reports"),
-        new(Permissions.Settings.View, "View system settings", "Settings"),
-        new(Permissions.Settings.Manage, "Manage system settings", "Settings")
+        new(Permissions.Platform.Clinics.View, "View clinics", "Platform Clinics", PermissionScope.Platform),
+        new(Permissions.Platform.Clinics.Create, "Create clinics", "Platform Clinics", PermissionScope.Platform),
+        new(Permissions.Platform.Clinics.Update, "Update clinics", "Platform Clinics", PermissionScope.Platform),
+        new(Permissions.Platform.Clinics.SetStatus, "Activate or suspend clinics", "Platform Clinics", PermissionScope.Platform),
+        new(Permissions.Platform.Clinics.ManageFeatures, "Manage clinic features", "Platform Clinics", PermissionScope.Platform),
+        new(Permissions.Platform.AuditLogs.View, "View platform audit logs", "Platform Audit", PermissionScope.Platform),
+        new(Permissions.Platform.Users.Manage, "Manage platform users", "Platform Users", PermissionScope.Platform),
+
+        new(Permissions.Clinic.AuditLogs.View, "View clinic audit logs", "Audit", PermissionScope.Clinic),
+        new(Permissions.Clinic.Patients.View, "View patients", "Patients", PermissionScope.Clinic),
+        new(Permissions.Clinic.Patients.Create, "Create patients", "Patients", PermissionScope.Clinic),
+        new(Permissions.Clinic.Patients.Update, "Update patients", "Patients", PermissionScope.Clinic),
+        new(Permissions.Clinic.Users.View, "View users", "Users", PermissionScope.Clinic),
+        new(Permissions.Clinic.Users.Manage, "Manage users", "Users", PermissionScope.Clinic),
+        new(Permissions.Clinic.Roles.View, "View roles", "Roles", PermissionScope.Clinic),
+        new(Permissions.Clinic.Roles.Manage, "Manage roles", "Roles", PermissionScope.Clinic),
+        new(Permissions.Clinic.Queue.View, "View queue", "Queue", PermissionScope.Clinic),
+        new(Permissions.Clinic.Queue.Manage, "Manage queue", "Queue", PermissionScope.Clinic),
+        new(Permissions.Clinic.Visits.View, "View visits", "Visits", PermissionScope.Clinic),
+        new(Permissions.Clinic.Visits.Create, "Create visits", "Visits", PermissionScope.Clinic),
+        new(Permissions.Clinic.Visits.Update, "Update visits", "Visits", PermissionScope.Clinic),
+        new(Permissions.Clinic.Clinical.View, "View clinical data", "Clinical", PermissionScope.Clinic),
+        new(Permissions.Clinic.Clinical.Manage, "Manage clinical data", "Clinical", PermissionScope.Clinic),
+        new(Permissions.Clinic.FollowUps.View, "View follow-ups", "Follow Ups", PermissionScope.Clinic),
+        new(Permissions.Clinic.FollowUps.Manage, "Manage follow-ups", "Follow Ups", PermissionScope.Clinic),
+        new(Permissions.Clinic.Reports.View, "View reports", "Reports", PermissionScope.Clinic),
+        new(Permissions.Clinic.Reports.Export, "Export reports", "Reports", PermissionScope.Clinic),
+        new(Permissions.Clinic.Settings.View, "View clinic settings", "Settings", PermissionScope.Clinic),
+        new(Permissions.Clinic.Settings.Manage, "Manage clinic settings", "Settings", PermissionScope.Clinic)
     };
+
+    public static IReadOnlyCollection<PermissionDefinition> Platform =>
+        All.Where(x => x.Scope == PermissionScope.Platform).ToArray();
+
+    public static IReadOnlyCollection<PermissionDefinition> Clinic =>
+        All.Where(x => x.Scope == PermissionScope.Clinic).ToArray();
 }
