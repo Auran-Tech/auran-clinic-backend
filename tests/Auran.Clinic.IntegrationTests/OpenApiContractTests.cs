@@ -8,19 +8,54 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     public async Task SwaggerDocument_ExposesStableAuthenticationOperations()
     {
         using var client = factory.CreateClient();
+        var paths = await GetPathsAsync(client);
 
+        Assert.Equal("Auth_Login", GetOperationId(paths, "/api/auth/login", "post"));
+        Assert.Equal("Auth_RefreshToken", GetOperationId(paths, "/api/auth/refresh", "post"));
+        Assert.Equal("Auth_Logout", GetOperationId(paths, "/api/auth/logout", "post"));
+        Assert.Equal("PlatformAuth_Login", GetOperationId(paths, "/api/platform/auth/login", "post"));
+        Assert.Equal("PlatformAuth_RefreshToken", GetOperationId(paths, "/api/platform/auth/refresh", "post"));
+        Assert.Equal("PlatformAuth_Logout", GetOperationId(paths, "/api/platform/auth/logout", "post"));
+    }
+
+    [Fact]
+    public async Task SwaggerDocument_ExposesStablePlatformClinicOperations()
+    {
+        using var client = factory.CreateClient();
+        var paths = await GetPathsAsync(client);
+
+        Assert.Equal("PlatformClinics_Search", GetOperationId(paths, "/api/platform/clinics", "get"));
+        Assert.Equal("PlatformClinics_Create", GetOperationId(paths, "/api/platform/clinics", "post"));
+        Assert.Equal("PlatformClinics_GetById", GetOperationId(paths, "/api/platform/clinics/{id}", "get"));
+        Assert.Equal("PlatformClinics_Update", GetOperationId(paths, "/api/platform/clinics/{id}", "put"));
+        Assert.Equal("PlatformClinics_SetStatus", GetOperationId(paths, "/api/platform/clinics/{id}/status", "put"));
+        Assert.Equal("PlatformClinicFeatures_Get", GetOperationId(paths, "/api/platform/clinics/{id}/features", "get"));
+        Assert.Equal("PlatformClinicFeatures_Update", GetOperationId(paths, "/api/platform/clinics/{id}/features", "put"));
+        Assert.Equal("PlatformAuditLogs_Search", GetOperationId(paths, "/api/platform/audit-logs", "get"));
+    }
+
+    [Fact]
+    public async Task SwaggerDocument_ExposesStableClinicSelfServiceOperations()
+    {
+        using var client = factory.CreateClient();
+        var paths = await GetPathsAsync(client);
+
+        Assert.Equal("Clinic_GetCurrent", GetOperationId(paths, "/api/clinic", "get"));
+        Assert.Equal("ClinicSettings_Get", GetOperationId(paths, "/api/clinic/settings", "get"));
+        Assert.Equal("ClinicSettings_Update", GetOperationId(paths, "/api/clinic/settings", "put"));
+        Assert.Equal("ClinicFeatures_GetCurrent", GetOperationId(paths, "/api/clinic/features", "get"));
+        Assert.Equal("AuditLogs_Search", GetOperationId(paths, "/api/audit-logs", "get"));
+    }
+
+    private static async Task<JsonElement> GetPathsAsync(HttpClient client)
+    {
         var response = await client.GetAsync("/swagger/v1/swagger.json");
-
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
-
-        var paths = document.RootElement.GetProperty("paths");
-        Assert.Equal("Auth_Login", GetOperationId(paths, "/api/auth/login"));
-        Assert.Equal("Auth_RefreshToken", GetOperationId(paths, "/api/auth/refresh"));
-        Assert.Equal("Auth_Logout", GetOperationId(paths, "/api/auth/logout"));
+        return document.RootElement.GetProperty("paths").Clone();
     }
 
-    private static string? GetOperationId(JsonElement paths, string path) =>
-        paths.GetProperty(path).GetProperty("post").GetProperty("operationId").GetString();
+    private static string? GetOperationId(JsonElement paths, string path, string method) =>
+        paths.GetProperty(path).GetProperty(method).GetProperty("operationId").GetString();
 }
