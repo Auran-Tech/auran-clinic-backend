@@ -11,30 +11,39 @@ public sealed class PermissionPolicyProvider(IOptions<AuthorizationOptions> opti
 {
     public override async Task<AuthorizationPolicy?> GetPolicyAsync(string policyName)
     {
+        if (policyName == ActorPolicies.Clinic)
+            return Build(new ClinicActorRequirement());
+        if (policyName == ActorPolicies.Platform)
+            return Build(new PlatformActorRequirement());
+
         if (policyName.StartsWith(PermissionPolicy.ClinicPrefix, StringComparison.Ordinal))
         {
             var permission = policyName[PermissionPolicy.ClinicPrefix.Length..];
-            return Build(new PermissionRequirement(permission, PermissionScope.Clinic));
+            return Build(
+                new ClinicActorRequirement(),
+                new PermissionRequirement(permission, PermissionScope.Clinic));
         }
 
         if (policyName.StartsWith(PermissionPolicy.PlatformPrefix, StringComparison.Ordinal))
         {
             var permission = policyName[PermissionPolicy.PlatformPrefix.Length..];
-            return Build(new PermissionRequirement(permission, PermissionScope.Platform));
+            return Build(
+                new PlatformActorRequirement(),
+                new PermissionRequirement(permission, PermissionScope.Platform));
         }
 
         if (policyName.StartsWith(FeaturePolicy.Prefix, StringComparison.Ordinal))
         {
             var feature = policyName[FeaturePolicy.Prefix.Length..];
-            return Build(new FeatureRequirement(feature));
+            return Build(new ClinicActorRequirement(), new FeatureRequirement(feature));
         }
 
         return await base.GetPolicyAsync(policyName);
     }
 
-    private static AuthorizationPolicy Build(IAuthorizationRequirement requirement) =>
+    private static AuthorizationPolicy Build(params IAuthorizationRequirement[] requirements) =>
         new AuthorizationPolicyBuilder()
             .RequireAuthenticatedUser()
-            .AddRequirements(requirement)
+            .AddRequirements(requirements)
             .Build();
 }

@@ -1,6 +1,7 @@
 using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
@@ -25,5 +26,11 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasIndex(x => new { x.ClinicId, x.OccurredAtUtc });
         builder.HasIndex(x => new { x.ActorType, x.ActorId });
         builder.HasIndex(x => new { x.EntityType, x.EntityId });
+
+        builder.HasOne<ClinicEntityType>()
+            .WithMany()
+            .HasForeignKey(x => x.ClinicId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

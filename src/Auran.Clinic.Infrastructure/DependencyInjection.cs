@@ -2,11 +2,13 @@ using System.Text;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Clinics;
+using Auran.Clinic.Application.Features;
 using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Caching;
 using Auran.Clinic.Infrastructure.Clinics;
+using Auran.Clinic.Infrastructure.Features;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -49,6 +51,8 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         var jwt = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is required.");
+        if (string.IsNullOrWhiteSpace(jwt.SigningKey) || jwt.SigningKey.Length < 32)
+            throw new InvalidOperationException("Jwt:SigningKey must be configured with at least 32 characters.");
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -68,11 +72,18 @@ public static class DependencyInjection
 
         services.AddAuthorization();
         services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<IPlatformAuthService, PlatformAuthService>();
+        services.AddScoped<ICurrentActor, CurrentActor>();
         services.AddScoped<IClinicService, ClinicService>();
+        services.AddScoped<IPlatformClinicService, PlatformClinicService>();
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IClinicAccessService, ClinicAccessService>();
+        services.AddScoped<SystemCatalogService>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, FeatureAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ClinicActorAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, PlatformActorAuthorizationHandler>();
         services.AddAuranCaching(configuration);
         return services;
     }

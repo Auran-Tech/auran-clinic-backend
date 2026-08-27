@@ -10,7 +10,17 @@ public static class DomainRelationshipConfiguration
     public static void ConfigureDomainRelationships(this ModelBuilder modelBuilder)
     {
         ConfigureClinicRelationships(modelBuilder);
+        ConfigureIdentityAndRbacRelationships(modelBuilder);
+        ConfigurePlatformRelationships(modelBuilder);
+        ConfigurePatientRelationships(modelBuilder);
+        ConfigureClinicalRelationships(modelBuilder);
+        ConfigureWorkflowRelationships(modelBuilder);
+        ConfigureVisitRelationships(modelBuilder);
+        ConfigureFileRelationships(modelBuilder);
+    }
 
+    private static void ConfigureIdentityAndRbacRelationships(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ClinicSettings>()
             .HasOne<ClinicEntityType>()
             .WithOne()
@@ -52,12 +62,51 @@ public static class DomainRelationshipConfiguration
             .WithMany()
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
 
-        ConfigurePatientRelationships(modelBuilder);
-        ConfigureClinicalRelationships(modelBuilder);
-        ConfigureWorkflowRelationships(modelBuilder);
-        ConfigureVisitRelationships(modelBuilder);
-        ConfigureFileRelationships(modelBuilder);
+    private static void ConfigurePlatformRelationships(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PlatformUser>()
+            .HasOne<ApplicationIdentityUser>()
+            .WithOne()
+            .HasForeignKey<PlatformUser>(x => x.IdentityUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlatformUserRole>()
+            .HasOne<PlatformUser>()
+            .WithMany()
+            .HasForeignKey(x => x.PlatformUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlatformUserRole>()
+            .HasOne<PlatformRole>()
+            .WithMany()
+            .HasForeignKey(x => x.PlatformRoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlatformRolePermission>()
+            .HasOne<PlatformRole>()
+            .WithMany()
+            .HasForeignKey(x => x.PlatformRoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlatformRolePermission>()
+            .HasOne<Permission>()
+            .WithMany()
+            .HasForeignKey(x => x.PermissionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlatformRefreshToken>()
+            .HasOne<PlatformUser>()
+            .WithMany()
+            .HasForeignKey(x => x.PlatformUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ClinicFeature>()
+            .HasOne<FeatureDefinition>()
+            .WithMany()
+            .HasForeignKey(x => x.FeatureDefinitionId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureClinicRelationships(ModelBuilder modelBuilder)
@@ -65,6 +114,7 @@ public static class DomainRelationshipConfiguration
         ConfigureClinic<User>(modelBuilder);
         ConfigureClinic<UserRole>(modelBuilder);
         ConfigureClinic<RefreshToken>(modelBuilder);
+        ConfigureClinic<ClinicFeature>(modelBuilder);
         ConfigureClinic<Patient>(modelBuilder);
         ConfigureClinic<PatientCondition>(modelBuilder);
         ConfigureClinic<PatientAllergy>(modelBuilder);
@@ -90,7 +140,6 @@ public static class DomainRelationshipConfiguration
         ConfigureClinic<PatientAttachment>(modelBuilder);
         ConfigureClinic<ClinicalOrderAttachment>(modelBuilder);
         ConfigureClinic<FollowUp>(modelBuilder);
-        ConfigureClinic<AuditLog>(modelBuilder);
     }
 
     private static void ConfigureClinic<TEntity>(ModelBuilder modelBuilder)
@@ -106,276 +155,125 @@ public static class DomainRelationshipConfiguration
     private static void ConfigurePatientRelationships(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<PatientCondition>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientCondition>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.RecordedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<PatientAllergy>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientAllergy>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.RecordedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<PatientMedication>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientMedication>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.RecordedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<PatientProfileField>()
-            .HasOne<PatientProfileSection>()
-            .WithMany()
-            .HasForeignKey(x => x.SectionId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+            .HasOne<PatientProfileSection>().WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientProfileFieldOption>()
-            .HasOne<PatientProfileField>()
-            .WithMany()
-            .HasForeignKey(x => x.FieldId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+            .HasOne<PatientProfileField>().WithMany().HasForeignKey(x => x.FieldId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<PatientProfileField>()
-            .WithMany()
-            .HasForeignKey(x => x.FieldId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<PatientProfileField>().WithMany().HasForeignKey(x => x.FieldId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<FileRecord>()
-            .WithMany()
-            .HasForeignKey(x => x.FileId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<FileRecord>().WithMany().HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureClinicalRelationships(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ClinicalFieldOption>()
-            .HasOne<ClinicalField>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalFieldId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalField>().WithMany().HasForeignKey(x => x.ClinicalFieldId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<ClinicalMeasurement>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalMeasurement>()
-            .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalMeasurement>()
-            .HasOne<ClinicalField>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalFieldId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalField>().WithMany().HasForeignKey(x => x.ClinicalFieldId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalMeasurement>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.RecordedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<ClinicalOrder>()
-            .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrder>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrder>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.DoctorId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrder>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.CreatedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<ClinicalOrderSection>()
-            .HasOne<ClinicalOrder>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalOrderId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalOrder>().WithMany().HasForeignKey(x => x.ClinicalOrderId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrderSection>()
-            .HasOne<ClinicalOrderSectionDefinition>()
-            .WithMany()
-            .HasForeignKey(x => x.SectionDefinitionId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+            .HasOne<ClinicalOrderSectionDefinition>().WithMany().HasForeignKey(x => x.SectionDefinitionId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrderItem>()
-            .HasOne<ClinicalOrderSection>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalOrderSectionId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalOrderSection>().WithMany().HasForeignKey(x => x.ClinicalOrderSectionId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<ClinicalOrderAttachment>()
-            .HasOne<ClinicalOrder>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalOrderId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalOrder>().WithMany().HasForeignKey(x => x.ClinicalOrderId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrderAttachment>()
-            .HasOne<ClinicalOrderSection>()
-            .WithMany()
-            .HasForeignKey(x => x.ClinicalOrderSectionId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<ClinicalOrderSection>().WithMany().HasForeignKey(x => x.ClinicalOrderSectionId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ClinicalOrderAttachment>()
-            .HasOne<FileRecord>()
-            .WithMany()
-            .HasForeignKey(x => x.FileId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<FileRecord>().WithMany().HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureWorkflowRelationships(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<WorkflowTransition>()
-            .HasOne<WorkflowStatus>()
-            .WithMany()
-            .HasForeignKey(x => x.FromStatusId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<WorkflowStatus>().WithMany().HasForeignKey(x => x.FromStatusId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<WorkflowTransition>()
-            .HasOne<WorkflowStatus>()
-            .WithMany()
-            .HasForeignKey(x => x.ToStatusId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<WorkflowStatus>().WithMany().HasForeignKey(x => x.ToStatusId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<QueueEntry>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueEntry>()
-            .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueEntry>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.DoctorId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueEntry>()
-            .HasOne<WorkflowStatus>()
-            .WithMany()
-            .HasForeignKey(x => x.WorkflowStatusId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<WorkflowStatus>().WithMany().HasForeignKey(x => x.WorkflowStatusId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<QueueStatusHistory>()
-            .HasOne<QueueEntry>()
-            .WithMany()
-            .HasForeignKey(x => x.QueueEntryId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<QueueEntry>().WithMany().HasForeignKey(x => x.QueueEntryId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueStatusHistory>()
-            .HasOne<WorkflowStatus>()
-            .WithMany()
-            .HasForeignKey(x => x.FromStatusId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<WorkflowStatus>().WithMany().HasForeignKey(x => x.FromStatusId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueStatusHistory>()
-            .HasOne<WorkflowStatus>()
-            .WithMany()
-            .HasForeignKey(x => x.ToStatusId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<WorkflowStatus>().WithMany().HasForeignKey(x => x.ToStatusId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueStatusHistory>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.ChangedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.ChangedByUserId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureVisitRelationships(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Visit>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Visit>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.DoctorId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<VisitSession>()
-            .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<VisitSession>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.DoctorId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<VisitSession>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.CreatedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<FollowUp>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<FollowUp>()
-            .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<FollowUp>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.DoctorId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<User>().WithMany().HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureFileRelationships(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<FileRecord>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.UploadedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+            .HasOne<User>().WithMany().HasForeignKey(x => x.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientAttachment>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientAttachment>()
-            .HasOne<FileRecord>()
-            .WithMany()
-            .HasForeignKey(x => x.FileId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<AuditLog>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.ActorUserId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasOne<FileRecord>().WithMany().HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Restrict);
     }
 }

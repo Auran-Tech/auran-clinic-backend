@@ -2,15 +2,17 @@ using System.Text.Json;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Domain.Common;
 using Auran.Clinic.Domain.Entities;
+using Auran.Clinic.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Auditing;
 
 public sealed class AuditSaveChangesInterceptor(
-    ICurrentUser currentUser,
+    ICurrentActor currentActor,
     IHttpContextAccessor httpContextAccessor) : SaveChangesInterceptor
 {
     public override InterceptionResult<int> SavingChanges(
@@ -36,20 +38,17 @@ public sealed class AuditSaveChangesInterceptor(
             return;
 
         var now = DateTime.UtcNow;
+        var actorId = ResolveActorId();
         var entries = dbContext.ChangeTracker.Entries<BaseEntity>()
             .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-            .Where(entry => entry.Entity is not AuditLog and not Permission and not RefreshToken)
+            .Where(entry => entry.Entity is not AuditLog and not RefreshToken and not PlatformRefreshToken)
             .ToList();
 
         var auditLogs = new List<AuditLog>();
         foreach (var entry in entries)
         {
-            ApplyBaseEntityMetadata(entry, now);
-
-            var clinicId = ResolveClinicId(entry.Entity);
-            if (!clinicId.HasValue || clinicId == Guid.Empty)
-                continue;
-
+            ApplyBaseEntityMetadata(entry, now, actorId);
+            var (scope, clinicId) = ResolveScope(entry.Entity);
             var action = entry.State switch
             {
                 EntityState.Added => "Create",
@@ -58,25 +57,30 @@ public sealed class AuditSaveChangesInterceptor(
                 _ => "Unknown"
             };
 
-            var metadata = BuildMetadata(entry);
             var httpContext = httpContextAccessor.HttpContext;
-
+            var actorType = currentActor.IsAuthenticated ? currentActor.ActorType : ActorType.System;
             auditLogs.Add(new AuditLog
             {
-                ClinicId = clinicId.Value,
-                ActorUserId = currentUser.UserId,
+                Id = Guid.NewGuid(),
+                Scope = scope,
+                ClinicId = clinicId,
+                ActorType = actorType,
+                ActorId = actorId,
+                ActorIdentityUserId = currentActor.IdentityUserId,
+                ActorDisplayName = currentActor.DisplayName,
+                ActorEmail = currentActor.Email,
                 Action = action,
                 Category = entry.Entity.GetType().Name,
                 EntityType = entry.Entity.GetType().Name,
                 EntityId = entry.Entity.Id == Guid.Empty ? null : entry.Entity.Id.ToString(),
                 Description = $"{entry.Entity.GetType().Name} {action.ToLowerInvariant()} operation.",
                 OccurredAtUtc = now,
-                MetadataJson = JsonSerializer.Serialize(metadata),
+                MetadataJson = JsonSerializer.Serialize(BuildMetadata(entry)),
                 IpAddress = httpContext?.Connection.RemoteIpAddress?.ToString(),
                 UserAgent = httpContext?.Request.Headers["User-Agent"].ToString(),
                 CorrelationId = httpContext?.TraceIdentifier,
                 CreatedDate = now,
-                CreateByUserId = currentUser.UserId
+                CreateByUserId = actorId
             });
         }
 
@@ -84,35 +88,39 @@ public sealed class AuditSaveChangesInterceptor(
             dbContext.Set<AuditLog>().AddRange(auditLogs);
     }
 
-    private void ApplyBaseEntityMetadata(EntityEntry<BaseEntity> entry, DateTime now)
+    private static void ApplyBaseEntityMetadata(EntityEntry<BaseEntity> entry, DateTime now, Guid? actorId)
     {
         if (entry.State == EntityState.Added)
         {
             if (entry.Entity.Id == Guid.Empty)
                 entry.Entity.Id = Guid.NewGuid();
-
             if (entry.Entity.CreatedDate == default)
                 entry.Entity.CreatedDate = now;
-
-            entry.Entity.CreateByUserId ??= currentUser.UserId;
+            entry.Entity.CreateByUserId ??= actorId;
         }
         else if (entry.State == EntityState.Modified)
         {
             entry.Entity.UpdatedDate = now;
-            entry.Entity.UpdatedByUserId = currentUser.UserId;
+            entry.Entity.UpdatedByUserId = actorId;
         }
     }
 
-    private Guid? ResolveClinicId(BaseEntity entity)
+    private (AuditScope Scope, Guid? ClinicId) ResolveScope(BaseEntity entity)
     {
-        if (entity is Clinic clinic)
-            return clinic.Id;
-
+        if (entity is ClinicEntityType clinic)
+            return (AuditScope.Clinic, clinic.Id);
         if (entity is ClinicEntity clinicEntity)
-            return clinicEntity.ClinicId;
+            return (AuditScope.Clinic, clinicEntity.ClinicId);
 
-        return currentUser.ClinicId;
+        return (AuditScope.Platform, null);
     }
+
+    private Guid? ResolveActorId() => currentActor.ActorType switch
+    {
+        ActorType.Platform => currentActor.PlatformUserId,
+        ActorType.Clinic => currentActor.ClinicUserId,
+        _ => null
+    };
 
     private static object BuildMetadata(EntityEntry<BaseEntity> entry)
     {
@@ -123,19 +131,16 @@ public sealed class AuditSaveChangesInterceptor(
         foreach (var property in entry.Properties)
         {
             var name = property.Metadata.Name;
-
             if (entry.State == EntityState.Added)
             {
                 newValues[name] = AuditRedactor.Sanitize(name, property.CurrentValue);
                 continue;
             }
-
             if (entry.State == EntityState.Deleted)
             {
                 oldValues[name] = AuditRedactor.Sanitize(name, property.OriginalValue);
                 continue;
             }
-
             if (!property.IsModified)
                 continue;
 
@@ -144,11 +149,6 @@ public sealed class AuditSaveChangesInterceptor(
             newValues[name] = AuditRedactor.Sanitize(name, property.CurrentValue);
         }
 
-        return new
-        {
-            ChangedFields = changedFields,
-            OldValues = oldValues,
-            NewValues = newValues
-        };
+        return new { ChangedFields = changedFields, OldValues = oldValues, NewValues = newValues };
     }
 }
