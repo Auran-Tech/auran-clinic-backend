@@ -1,3 +1,4 @@
+using Auran.Clinic.Api.OpenApi;
 using Auran.Clinic.Application;
 using Auran.Clinic.Infrastructure;
 using Auran.Clinic.Infrastructure.Platform;
@@ -21,6 +22,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.EnableAnnotations();
+    options.OperationFilter<AllowAnonymousOperationFilter>();
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
