@@ -7,8 +7,8 @@ public sealed class UpdateClinicSettingsRequestValidator : AbstractValidator<Upd
     public UpdateClinicSettingsRequestValidator()
     {
         RuleFor(x => x.LogoUrl).MaximumLength(1000);
-        RuleFor(x => x.PrimaryColor).MaximumLength(32);
-        RuleFor(x => x.SecondaryColor).MaximumLength(32);
+        RuleFor(x => x.PrimaryColor).Matches("^#[0-9A-Fa-f]{6}$").When(x => !string.IsNullOrWhiteSpace(x.PrimaryColor));
+        RuleFor(x => x.SecondaryColor).Matches("^#[0-9A-Fa-f]{6}$").When(x => !string.IsNullOrWhiteSpace(x.SecondaryColor));
         RuleFor(x => x.FontFamily).MaximumLength(100);
         RuleFor(x => x.WelcomeTitle).MaximumLength(200);
         RuleFor(x => x.WelcomeMessage).MaximumLength(2000);
