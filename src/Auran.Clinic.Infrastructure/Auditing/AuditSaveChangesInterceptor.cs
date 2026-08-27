@@ -105,7 +105,7 @@ public sealed class AuditSaveChangesInterceptor(
 
     private Guid? ResolveClinicId(BaseEntity entity)
     {
-        if (entity is Domain.Entities.Clinic clinic)
+        if (entity is Clinic clinic)
             return clinic.Id;
 
         if (entity is ClinicEntity clinicEntity)
