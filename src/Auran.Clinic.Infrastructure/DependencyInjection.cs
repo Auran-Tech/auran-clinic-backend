@@ -1,8 +1,12 @@
 using System.Text;
+using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
+using Auran.Clinic.Application.Clinics;
+using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Caching;
+using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,10 +23,15 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddHttpContextAccessor();
+        services.AddScoped<AuditSaveChangesInterceptor>();
+
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            services.AddDbContext<AuranClinicDbContext>(options => options.UseSqlServer(connectionString));
+            services.AddDbContext<AuranClinicDbContext>((serviceProvider, options) =>
+                options.UseSqlServer(connectionString)
+                    .AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>()));
         }
 
         services.AddIdentityCore<ApplicationIdentityUser>(options =>
@@ -58,9 +67,10 @@ public static class DependencyInjection
             });
 
         services.AddAuthorization();
-        services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<IClinicService, ClinicService>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddAuranCaching(configuration);
