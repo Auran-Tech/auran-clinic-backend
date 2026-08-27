@@ -12,7 +12,7 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(x => x.Code).HasMaxLength(128);
         builder.Property(x => x.Name).HasMaxLength(128);
 
-        builder.HasOne<Domain.Entities.Clinic>()
+        builder.HasOne<Clinic>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
