@@ -11,7 +11,7 @@ namespace Auran.Clinic.Api.Controllers;
 [ApiController]
 [Route("api/platform/audit-logs")]
 [Produces("application/json")]
-[Authorize(Policy = PermissionPolicy.ForPlatform(Permissions.Platform.AuditLogs.View))]
+[Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.AuditLogs.View)]
 public sealed class PlatformAuditLogsController(IAuditService auditService, IValidator<AuditLogSearchRequest> validator) : ControllerBase
 {
     [HttpGet]
