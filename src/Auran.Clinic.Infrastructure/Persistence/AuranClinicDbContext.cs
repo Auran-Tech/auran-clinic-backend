@@ -1,18 +1,22 @@
 using Auran.Clinic.Domain.Entities;
+using Auran.Clinic.Infrastructure.Identity;
+using Auran.Clinic.Infrastructure.Persistence.Configurations;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence;
 
 public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options)
-    : DbContext(options)
+    : IdentityDbContext<ApplicationIdentityUser>(options)
 {
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
+    public new DbSet<User> Users => Set<User>();
+    public new DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<PatientCondition> PatientConditions => Set<PatientCondition>();
     public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();
@@ -45,5 +49,6 @@ public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AuranClinicDbContext).Assembly);
+        modelBuilder.ConfigureDomainRelationships();
     }
 }

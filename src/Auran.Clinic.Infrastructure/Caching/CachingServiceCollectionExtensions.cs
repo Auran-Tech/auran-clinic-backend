@@ -9,16 +9,17 @@ public static class CachingServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var provider = configuration[$"{CacheOptions.SectionName}:Provider"]
-            ?? CacheProviders.Memory;
+        var options = configuration.GetSection(CacheOptions.SectionName).Get<CacheOptions>() ?? new CacheOptions();
 
-        if (provider.Equals(CacheProviders.Redis, StringComparison.OrdinalIgnoreCase))
+        if (options.Provider.Equals(CacheProviders.Memory, StringComparison.OrdinalIgnoreCase))
         {
-            var connectionString = configuration[$"{CacheOptions.SectionName}:Redis:ConnectionString"];
-            var instanceName = configuration[$"{CacheOptions.SectionName}:Redis:InstanceName"]
-                ?? "AuranClinic:";
+            services.AddDistributedMemoryCache();
+            return services;
+        }
 
-            if (string.IsNullOrWhiteSpace(connectionString))
+        if (options.Provider.Equals(CacheProviders.Redis, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(options.Redis.ConnectionString))
             {
                 throw new InvalidOperationException(
                     "Cache:Redis:ConnectionString is required when Cache:Provider is Redis.");
@@ -26,20 +27,14 @@ public static class CachingServiceCollectionExtensions
 
             services.AddStackExchangeRedisCache(redis =>
             {
-                redis.Configuration = connectionString;
-                redis.InstanceName = instanceName;
+                redis.Configuration = options.Redis.ConnectionString;
+                redis.InstanceName = options.Redis.InstanceName;
             });
 
             return services;
         }
 
-        if (!provider.Equals(CacheProviders.Memory, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Unsupported cache provider '{provider}'. Use Memory or Redis.");
-        }
-
-        services.AddDistributedMemoryCache();
-        return services;
+        throw new InvalidOperationException(
+            $"Unsupported cache provider '{options.Provider}'. Supported providers are Memory and Redis.");
     }
 }
