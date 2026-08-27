@@ -6,6 +6,13 @@ namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
 public class RolePermissionConfiguration : IEntityTypeConfiguration<RolePermission>
 {
-    public void Configure(EntityTypeBuilder<RolePermission> builder) =>
+    public void Configure(EntityTypeBuilder<RolePermission> builder)
+    {
         builder.HasIndex(x => new { x.ClinicId, x.RoleId, x.PermissionId }).IsUnique();
+
+        builder.HasOne<Clinic>()
+            .WithMany()
+            .HasForeignKey(x => x.ClinicId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
 }
