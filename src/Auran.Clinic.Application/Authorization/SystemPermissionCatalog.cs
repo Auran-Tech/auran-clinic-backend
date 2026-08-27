@@ -4,7 +4,7 @@ namespace Auran.Clinic.Application.Authorization;
 
 public static class SystemPermissionCatalog
 {
-    public static readonly IReadOnlyCollection<PermissionDefinition> All = new[]
+    public static readonly IReadOnlyCollection<PermissionDefinition> All = new PermissionDefinition[]
     {
         new(Permissions.Platform.Clinics.View, "View clinics", "Platform Clinics", PermissionScope.Platform),
         new(Permissions.Platform.Clinics.Create, "Create clinics", "Platform Clinics", PermissionScope.Platform),
