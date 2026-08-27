@@ -1,5 +1,6 @@
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
+using Auran.Clinic.Infrastructure.Persistence.Configurations;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
@@ -48,5 +49,6 @@ public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AuranClinicDbContext).Assembly);
+        modelBuilder.ConfigureDomainRelationships();
     }
 }
