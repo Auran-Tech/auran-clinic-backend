@@ -11,8 +11,10 @@ using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Features;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
+using Auran.Clinic.Infrastructure.Platform;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -49,6 +51,8 @@ public static class DependencyInjection
         .AddSignInManager();
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<PlatformBootstrapOptions>(configuration.GetSection(PlatformBootstrapOptions.SectionName));
+
         var jwt = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is required.");
         if (string.IsNullOrWhiteSpace(jwt.SigningKey) || jwt.SigningKey.Length < 32)
@@ -79,11 +83,13 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IClinicAccessService, ClinicAccessService>();
         services.AddScoped<SystemCatalogService>();
+        services.AddScoped<PlatformBootstrapService>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, FeatureAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, ClinicActorAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, PlatformActorAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditAuthorizationMiddlewareResultHandler>();
         services.AddAuranCaching(configuration);
         return services;
     }

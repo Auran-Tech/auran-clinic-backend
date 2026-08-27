@@ -1,5 +1,6 @@
 using Auran.Clinic.Application;
 using Auran.Clinic.Infrastructure;
+using Auran.Clinic.Infrastructure.Platform;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -16,7 +17,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Auran Clinic API",
         Version = "v1",
-        Description = "Backend API for Auran Clinic. The OpenAPI document is the machine-readable source of truth for API discovery and AI tool generation. Operation IDs are stable identifiers and endpoint descriptions document authentication, side effects, and expected responses."
+        Description = "Backend API for Auran Clinic. The OpenAPI document is the machine-readable source of truth for API discovery and AI tool generation. Platform and clinic security scopes are intentionally separate; operation IDs are stable identifiers and endpoint descriptions document authentication, permissions and side effects."
     });
 
     options.EnableAnnotations();
@@ -27,17 +28,13 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "JWT access token returned by the login or refresh endpoint. Enter the token only; Swagger adds the Bearer prefix."
+        Description = "JWT access token returned by the matching platform or clinic authentication endpoint. Platform and clinic JWTs are not interchangeable."
     });
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         [new OpenApiSecurityScheme
         {
-            Reference = new OpenApiReference
-            {
-                Type = ReferenceType.SecurityScheme,
-                Id = "Bearer"
-            }
+            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
         }] = Array.Empty<string>()
     });
 });
@@ -47,14 +44,15 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-// Keep the machine-readable OpenAPI document available in every environment so
-// automated clients can discover the API contract. The interactive UI remains development-only.
-app.UseSwagger();
-
-if (app.Environment.IsDevelopment())
+if (builder.Configuration.GetValue<bool>($"{PlatformBootstrapOptions.SectionName}:Enabled"))
 {
-    app.UseSwaggerUI();
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<PlatformBootstrapService>().BootstrapAsync();
 }
+
+app.UseSwagger();
+if (app.Environment.IsDevelopment())
+    app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
