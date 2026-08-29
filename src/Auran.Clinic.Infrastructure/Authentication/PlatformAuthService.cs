@@ -144,7 +144,7 @@ public sealed class PlatformAuthService(
             return;
 
         await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.Logout",
-            "Platform refresh token was revoked during logout.", cancellationToken);
+            "Platform authentication session was revoked during logout.", cancellationToken);
     }
 
     private async Task<PlatformAuthResponse> CreateSessionAsync(
@@ -174,13 +174,14 @@ public sealed class PlatformAuthService(
             .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
+        var sessionId = Guid.NewGuid();
         var expiresDate = now.AddMinutes(_jwt.AccessTokenMinutes);
-        var accessToken = CreateAccessToken(platformUser, identityUser, roles, permissions, expiresDate);
+        var accessToken = CreateAccessToken(platformUser, identityUser, roles, permissions, sessionId, expiresDate);
         var rawRefreshToken = CreateRefreshToken();
 
         dbContext.PlatformRefreshTokens.Add(new PlatformRefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = sessionId,
             PlatformUserId = platformUser.Id,
             TokenHash = HashToken(rawRefreshToken),
             ExpiresDate = now.AddDays(_jwt.RefreshTokenDays),
@@ -211,6 +212,7 @@ public sealed class PlatformAuthService(
         ApplicationIdentityUser identityUser,
         IEnumerable<string> roles,
         IEnumerable<string> permissions,
+        Guid sessionId,
         DateTime expiresDate)
     {
         var claims = new List<Claim>
@@ -219,6 +221,7 @@ public sealed class PlatformAuthService(
             new(ClaimTypes.NameIdentifier, identityUser.Id),
             new("actor_type", ActorType.Platform.ToString()),
             new("platform_user_id", platformUser.Id.ToString()),
+            new("session_id", sessionId.ToString()),
             new("display_name", platformUser.FullName),
             new(ClaimTypes.Email, identityUser.Email ?? platformUser.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
