@@ -3,7 +3,7 @@ namespace Auran.Clinic.Application.Clinics;
 public sealed class CreateClinicRequest
 {
     public required string Name { get; set; }
-    public required string Code { get; set; }
+    public required string CodePrefix { get; set; }
     public string? LogoUrl { get; set; }
     public string? PrimaryColor { get; set; }
     public string? SecondaryColor { get; set; }
