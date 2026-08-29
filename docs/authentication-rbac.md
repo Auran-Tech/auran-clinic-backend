@@ -23,6 +23,7 @@ Platform authentication uses `/api/platform/auth/*`. Platform JWTs contain:
 
 - `actor_type=Platform`
 - `platform_user_id`
+- `session_id`
 - `platform_role`
 - `platform_permission`
 - identity/display claims
@@ -39,15 +40,36 @@ Clinic authentication remains under `/api/auth/*`. Clinic JWTs contain:
 - `clinic_user_id`
 - `clinic_id`
 - `clinic_super_user`
+- `session_id`
 - `clinic_role`
 - `clinic_permission`
 - identity/display claims
 
 Login and refresh are rejected when the clinic is inactive. Protected clinic requests also pass through the clinic actor guard, so suspension applies to already-issued access tokens after the clinic-status cache is invalidated.
 
-## Refresh tokens
+## Refresh tokens and revocable sessions
 
 Platform and clinic refresh tokens use separate persistence models. Both use cryptographically random raw tokens, persist only SHA-256 hashes, revoke consumed tokens during rotation, and create replacement tokens. Raw refresh tokens are returned only to the client.
+
+Each access token is bound to the persisted refresh-token row for the same authentication session through the `session_id` claim. JWT signature, issuer, audience and lifetime validation still run normally, then the API verifies that the referenced session is still active.
+
+This gives immediate session termination without adding a separate JWT blacklist:
+
+```text
+Login
+  -> AccessToken(session_id=S1) + RefreshToken(row Id=S1)
+
+Refresh S1
+  -> revoke S1
+  -> AccessToken(session_id=S2) + RefreshToken(row Id=S2)
+  -> old access token S1 is rejected immediately
+
+Logout S2
+  -> revoke S2
+  -> access token S2 is rejected immediately
+```
+
+A revoked or expired session causes protected requests to fail authentication even if the JWT's cryptographic signature and `exp` are otherwise valid. This applies consistently to both platform and clinic authentication.
 
 ## Authorization scopes
 
