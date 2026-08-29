@@ -10,8 +10,10 @@ public sealed class DateRangeAttribute(string fromProperty, string toProperty) :
         if (value is null)
             return ValidationResult.Success;
 
-        var from = validationContext.ObjectType.GetProperty(fromProperty)?.GetValue(value) as DateTime?;
-        var to = validationContext.ObjectType.GetProperty(toProperty)?.GetValue(value) as DateTime?;
+        var fromValue = validationContext.ObjectType.GetProperty(fromProperty)?.GetValue(value);
+        var toValue = validationContext.ObjectType.GetProperty(toProperty)?.GetValue(value);
+        var from = fromValue is DateTime fromDate ? fromDate : (DateTime?)null;
+        var to = toValue is DateTime toDate ? toDate : (DateTime?)null;
 
         return !from.HasValue || !to.HasValue || from.Value <= to.Value
             ? ValidationResult.Success
