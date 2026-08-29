@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,10 +11,14 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Keep the legacy audit actor column long enough to backfill the new
+            // actor snapshot fields. Dropping only the FK here preserves the data.
             migrationBuilder.DropForeignKey(
                 name: "FK_AuditLogs_Users_ActorUserId",
                 table: "AuditLogs");
 
+            // Global role codes must be duplicated per existing clinic, so the old
+            // global unique indexes have to be removed before the data conversion.
             migrationBuilder.DropIndex(
                 name: "IX_Roles_Code",
                 table: "Roles");
@@ -22,18 +26,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_RolePermissions_RoleId_PermissionId",
                 table: "RolePermissions");
-
-            migrationBuilder.DropIndex(
-                name: "IX_AuditLogs_ActorUserId",
-                table: "AuditLogs");
-
-            migrationBuilder.DropIndex(
-                name: "IX_AuditLogs_ClinicId",
-                table: "AuditLogs");
-
-            migrationBuilder.DropColumn(
-                name: "ActorUserId",
-                table: "AuditLogs");
 
             migrationBuilder.RenameColumn(
                 name: "IsSuperUser",
@@ -49,19 +41,19 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 oldClrType: typeof(string),
                 oldType: "nvarchar(max)");
 
+            // Add these as nullable first. Legacy roles are global and cannot be
+            // assigned Guid.Empty because the final columns reference Clinics.
             migrationBuilder.AddColumn<Guid>(
                 name: "ClinicId",
                 table: "Roles",
                 type: "uniqueidentifier",
-                nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ClinicId",
                 table: "RolePermissions",
                 type: "uniqueidentifier",
-                nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                nullable: true);
 
             migrationBuilder.AlterColumn<string>(
                 name: "Name",
@@ -87,14 +79,15 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Clinic");
 
+            // Existing clinics pre-date suspension support and must remain usable.
             migrationBuilder.AddColumn<bool>(
                 name: "IsActive",
                 table: "Clinics",
                 type: "bit",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: true);
 
             migrationBuilder.AlterColumn<string>(
                 name: "IpAddress",
@@ -175,7 +168,7 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Clinic");
 
             migrationBuilder.AddColumn<string>(
                 name: "Category",
@@ -183,7 +176,7 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 type: "nvarchar(100)",
                 maxLength: 100,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Legacy");
 
             migrationBuilder.AddColumn<string>(
                 name: "CorrelationId",
@@ -204,7 +197,7 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Clinic");
 
             migrationBuilder.AddColumn<string>(
                 name: "UserAgent",
@@ -213,13 +206,136 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 maxLength: 1000,
                 nullable: true);
 
+            // Identity accounts that already exist are clinic accounts. Platform
+            // identities are introduced by this migration and bootstrap later.
             migrationBuilder.AddColumn<string>(
                 name: "AccountType",
                 table: "AspNetUsers",
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Clinic");
+
+            migrationBuilder.Sql("""
+                UPDATE [Clinics]
+                SET [IsActive] = 1;
+
+                UPDATE [Permissions]
+                SET [Scope] = 'Clinic';
+
+                UPDATE [AspNetUsers]
+                SET [AccountType] = 'Clinic';
+
+                UPDATE auditLog
+                SET [ActorId] = auditLog.[ActorUserId],
+                    [ActorIdentityUserId] = clinicUser.[IdentityUserId],
+                    [ActorDisplayName] = clinicUser.[FullName],
+                    [ActorEmail] = clinicUser.[Email],
+                    [ActorType] = 'Clinic',
+                    [Scope] = 'Clinic',
+                    [Category] = LEFT(COALESCE(NULLIF(auditLog.[EntityType], ''), 'Legacy'), 100)
+                FROM [AuditLogs] auditLog
+                LEFT JOIN [Users] clinicUser ON clinicUser.[Id] = auditLog.[ActorUserId];
+                """);
+
+            // Convert each legacy global role into a clinic-scoped copy for every
+            // existing clinic. This preserves global-role availability for old
+            // tenants, remaps UserRoles, and duplicates the permission mappings.
+            migrationBuilder.Sql("""
+                CREATE TABLE #RoleMap
+                (
+                    [LegacyRoleId] uniqueidentifier NOT NULL,
+                    [ClinicId] uniqueidentifier NOT NULL,
+                    [NewRoleId] uniqueidentifier NOT NULL,
+                    PRIMARY KEY ([LegacyRoleId], [ClinicId])
+                );
+
+                INSERT INTO #RoleMap ([LegacyRoleId], [ClinicId], [NewRoleId])
+                SELECT roleEntity.[Id], clinic.[Id], NEWID()
+                FROM [Roles] roleEntity
+                CROSS JOIN [Clinics] clinic
+                WHERE roleEntity.[ClinicId] IS NULL;
+
+                INSERT INTO [Roles]
+                (
+                    [Id], [Code], [Name], [IsSystem], [CreatedDate], [UpdatedDate],
+                    [CreateByUserId], [UpdatedByUserId], [ClinicId]
+                )
+                SELECT mapping.[NewRoleId], roleEntity.[Code], roleEntity.[Name], roleEntity.[IsSystem],
+                       roleEntity.[CreatedDate], roleEntity.[UpdatedDate], roleEntity.[CreateByUserId],
+                       roleEntity.[UpdatedByUserId], mapping.[ClinicId]
+                FROM #RoleMap mapping
+                INNER JOIN [Roles] roleEntity ON roleEntity.[Id] = mapping.[LegacyRoleId];
+
+                INSERT INTO [RolePermissions]
+                (
+                    [Id], [RoleId], [PermissionId], [CreatedDate], [UpdatedDate],
+                    [CreateByUserId], [UpdatedByUserId], [ClinicId]
+                )
+                SELECT NEWID(), mapping.[NewRoleId], rolePermission.[PermissionId],
+                       rolePermission.[CreatedDate], rolePermission.[UpdatedDate],
+                       rolePermission.[CreateByUserId], rolePermission.[UpdatedByUserId], mapping.[ClinicId]
+                FROM #RoleMap mapping
+                INNER JOIN [RolePermissions] rolePermission
+                    ON rolePermission.[RoleId] = mapping.[LegacyRoleId]
+                WHERE rolePermission.[ClinicId] IS NULL;
+
+                UPDATE userRole
+                SET [RoleId] = mapping.[NewRoleId]
+                FROM [UserRoles] userRole
+                INNER JOIN #RoleMap mapping
+                    ON mapping.[LegacyRoleId] = userRole.[RoleId]
+                   AND mapping.[ClinicId] = userRole.[ClinicId];
+
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [UserRoles] userRole
+                    INNER JOIN [Roles] roleEntity ON roleEntity.[Id] = userRole.[RoleId]
+                    WHERE roleEntity.[ClinicId] IS NULL
+                )
+                    THROW 51010, 'Unable to map one or more legacy UserRoles to a clinic-scoped role.', 1;
+
+                DELETE FROM [RolePermissions]
+                WHERE [ClinicId] IS NULL;
+
+                DELETE FROM [Roles]
+                WHERE [ClinicId] IS NULL;
+
+                DROP TABLE #RoleMap;
+                """);
+
+            migrationBuilder.AlterColumn<Guid>(
+                name: "ClinicId",
+                table: "Roles",
+                type: "uniqueidentifier",
+                nullable: false,
+                oldClrType: typeof(Guid),
+                oldType: "uniqueidentifier",
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<Guid>(
+                name: "ClinicId",
+                table: "RolePermissions",
+                type: "uniqueidentifier",
+                nullable: false,
+                oldClrType: typeof(Guid),
+                oldType: "uniqueidentifier",
+                oldNullable: true);
+
+            // Legacy actor data has been copied into snapshots; only now is it safe
+            // to remove the old FK/index/column.
+            migrationBuilder.DropIndex(
+                name: "IX_AuditLogs_ActorUserId",
+                table: "AuditLogs");
+
+            migrationBuilder.DropIndex(
+                name: "IX_AuditLogs_ClinicId",
+                table: "AuditLogs");
+
+            migrationBuilder.DropColumn(
+                name: "ActorUserId",
+                table: "AuditLogs");
 
             migrationBuilder.CreateTable(
                 name: "FeatureDefinitions",
@@ -533,6 +649,37 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Rolling clinic-scoped roles back to a global catalog is ambiguous when
+            // the same code exists in more than one clinic. Refuse to silently lose
+            // data. Likewise, the legacy AuditLog schema requires a valid clinic user
+            // actor and non-null ClinicId for every row.
+            migrationBuilder.Sql("""
+                IF EXISTS
+                (
+                    SELECT [Code]
+                    FROM [Roles]
+                    GROUP BY [Code]
+                    HAVING COUNT(*) > 1
+                )
+                    THROW 51020, 'Cannot roll back PlatformClinicFoundation because clinic-scoped role codes would collapse into duplicate global role codes.', 1;
+
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [AuditLogs] auditLog
+                    WHERE auditLog.[ClinicId] IS NULL
+                       OR auditLog.[ActorType] <> 'Clinic'
+                       OR auditLog.[ActorId] IS NULL
+                       OR NOT EXISTS
+                       (
+                           SELECT 1
+                           FROM [Users] clinicUser
+                           WHERE clinicUser.[Id] = auditLog.[ActorId]
+                       )
+                )
+                    THROW 51021, 'Cannot roll back PlatformClinicFoundation because one or more audit rows cannot be represented by the legacy clinic-user actor schema.', 1;
+                """);
+
             migrationBuilder.DropForeignKey(
                 name: "FK_RolePermissions_Clinics_ClinicId",
                 table: "RolePermissions");
@@ -597,6 +744,28 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_AspNetUsers_AccountType",
                 table: "AspNetUsers");
+
+            // Restore ActorUserId from the preserved actor id before removing the
+            // expanded actor metadata columns.
+            migrationBuilder.AddColumn<Guid>(
+                name: "ActorUserId",
+                table: "AuditLogs",
+                type: "uniqueidentifier",
+                nullable: true);
+
+            migrationBuilder.Sql("""
+                UPDATE [AuditLogs]
+                SET [ActorUserId] = [ActorId];
+                """);
+
+            migrationBuilder.AlterColumn<Guid>(
+                name: "ActorUserId",
+                table: "AuditLogs",
+                type: "uniqueidentifier",
+                nullable: false,
+                oldClrType: typeof(Guid),
+                oldType: "uniqueidentifier",
+                oldNullable: true);
 
             migrationBuilder.DropColumn(
                 name: "ClinicId",
@@ -724,7 +893,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 table: "AuditLogs",
                 type: "uniqueidentifier",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"),
                 oldClrType: typeof(Guid),
                 oldType: "uniqueidentifier",
                 oldNullable: true);
@@ -737,13 +905,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 oldClrType: typeof(string),
                 oldType: "nvarchar(160)",
                 oldMaxLength: 160);
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "ActorUserId",
-                table: "AuditLogs",
-                type: "uniqueidentifier",
-                nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
 
             migrationBuilder.CreateIndex(
                 name: "IX_Roles_Code",
