@@ -32,18 +32,18 @@ jobs:
         if: github.event_name == 'pull_request'
         run: dotnet tool install --global dotnet-ef --version 10.0.11
 
-      - name: Generate platform clinic foundation migration when missing
+      - name: Generate business code and file storage migration when missing
         if: github.event_name == 'pull_request'
         id: migration
         env:
           ASPNETCORE_ENVIRONMENT: Development
         run: |
-          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -maxdepth 1 -name '*_PlatformClinicFoundation.cs' | grep -q .; then
+          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -maxdepth 1 -name '*_BusinessCodeAndFileStorageFoundation.cs' | grep -q .; then
             echo "generated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          dotnet ef migrations add PlatformClinicFoundation \
+          dotnet ef migrations add BusinessCodeAndFileStorageFoundation \
             --project src/Auran.Clinic.Infrastructure \
             --startup-project src/Auran.Clinic.Api \
             --context AuranClinicDbContext \
@@ -56,7 +56,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-          git commit -m "chore: add platform clinic foundation migration"
+          git commit -m "chore: add business code and file storage migration"
           git push origin HEAD:${{ github.head_ref }}
 
       - name: Build
