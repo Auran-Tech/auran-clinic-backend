@@ -74,7 +74,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     {
         var security = operation.GetProperty("security");
         Assert.True(security.GetArrayLength() > 0);
-        Assert.Equal(0, security[0].EnumerateObject().Count());
+        Assert.Empty(security[0].EnumerateObject());
     }
 
     private static JsonElement GetOperation(JsonElement paths, string path, string method) =>
