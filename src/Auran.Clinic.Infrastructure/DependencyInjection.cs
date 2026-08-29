@@ -84,6 +84,19 @@ public static class DependencyInjection
                             context.Token = normalizedToken;
 
                         return Task.CompletedTask;
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var validator = context.HttpContext.RequestServices
+                            .GetRequiredService<AccessSessionValidator>();
+
+                        if (context.Principal is null
+                            || !await validator.IsActiveAsync(
+                                context.Principal,
+                                context.HttpContext.RequestAborted))
+                        {
+                            context.Fail("Authentication session is no longer active.");
+                        }
                     }
                 };
             });
@@ -91,6 +104,7 @@ public static class DependencyInjection
         services.AddAuthorization();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPlatformAuthService, PlatformAuthService>();
+        services.AddScoped<AccessSessionValidator>();
         services.AddScoped<ICurrentActor, CurrentActor>();
         services.AddScoped<IClinicService, ClinicService>();
         services.AddScoped<IPlatformClinicService, PlatformClinicService>();
