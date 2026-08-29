@@ -95,8 +95,8 @@ public sealed class FileService(
             await dbContext.SaveChangesAsync(cancellationToken);
             return Failure("Upload session has expired.");
         }
-        if (session.Status is FileUploadStatus.Completed or FileUploadStatus.Expired or FileUploadStatus.Failed)
-            return Failure("Upload session is no longer active.");
+        if (session.Status != FileUploadStatus.Pending)
+            return Failure("Upload session is no longer available for content upload.");
         if (session.StorageProvider != storageProvider.Provider)
             return Failure("Upload session storage provider is not available.");
         if (contentLength.HasValue && contentLength.Value != session.ExpectedSize)
