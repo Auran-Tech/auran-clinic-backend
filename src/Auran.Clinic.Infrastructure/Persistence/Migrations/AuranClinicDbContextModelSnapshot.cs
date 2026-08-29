@@ -239,16 +239,8 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("CityCode")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("CountryCode")
-                        .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)");
 
                     b.Property<Guid?>("CreateByUserId")
                         .HasColumnType("uniqueidentifier");
@@ -674,62 +666,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.ToTable("ClinicalOrderSectionDefinitions");
                 });
 
-            modelBuilder.Entity("Auran.Clinic.Domain.Entities.CodeCounter", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("ClinicId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("CodeType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<Guid?>("CreateByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("LastNumber")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Prefix")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClinicId");
-
-                    b.HasIndex("Scope", "ClinicId", "CodeType", "Prefix", "Year")
-                        .IsUnique()
-                        .HasFilter("[ClinicId] IS NOT NULL");
-
-                    b.ToTable("CodeCounters", t =>
-                        {
-                            t.HasCheckConstraint("CK_CodeCounters_ScopeClinic", "([Scope] = 'Platform' AND [ClinicId] IS NULL) OR ([Scope] = 'Clinic' AND [ClinicId] IS NOT NULL)");
-                        });
-                });
-
             modelBuilder.Entity("Auran.Clinic.Domain.Entities.FeatureDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -784,8 +720,7 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ContentType")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid?>("CreateByUserId")
                         .HasColumnType("uniqueidentifier");
@@ -793,33 +728,24 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("FileExtension")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
                     b.Property<string>("OriginalName")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<long>("Size")
                         .HasColumnType("bigint");
 
                     b.Property<string>("StorageKey")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("StorageProvider")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("StoredName")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid?>("UpdatedByUserId")
                         .HasColumnType("uniqueidentifier");
@@ -835,104 +761,11 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StorageKey")
-                        .IsUnique();
+                    b.HasIndex("ClinicId");
 
                     b.HasIndex("UploadedByUserId");
 
-                    b.HasIndex("ClinicId", "UploadedAtUtc");
-
                     b.ToTable("Files");
-                });
-
-            modelBuilder.Entity("Auran.Clinic.Domain.Entities.FileUploadSession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ClinicId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<Guid?>("CreateByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long>("ExpectedSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("ExpiresAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("FileExtension")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<Guid?>("FileId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("OriginalName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<Guid>("RequestedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("StorageProvider")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UploadTokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<DateTime?>("UploadedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FileId")
-                        .IsUnique()
-                        .HasFilter("[FileId] IS NOT NULL");
-
-                    b.HasIndex("RequestedByUserId");
-
-                    b.HasIndex("UploadTokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("ClinicId", "Status", "ExpiresAtUtc");
-
-                    b.ToTable("FileUploadSessions");
                 });
 
             modelBuilder.Entity("Auran.Clinic.Domain.Entities.FollowUp", b =>
@@ -2627,14 +2460,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Auran.Clinic.Domain.Entities.CodeCounter", b =>
-                {
-                    b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
-                        .WithMany()
-                        .HasForeignKey("ClinicId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
             modelBuilder.Entity("Auran.Clinic.Domain.Entities.FileRecord", b =>
                 {
                     b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
@@ -2646,26 +2471,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UploadedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Auran.Clinic.Domain.Entities.FileUploadSession", b =>
-                {
-                    b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
-                        .WithMany()
-                        .HasForeignKey("ClinicId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Auran.Clinic.Domain.Entities.FileRecord", null)
-                        .WithMany()
-                        .HasForeignKey("FileId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RequestedByUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

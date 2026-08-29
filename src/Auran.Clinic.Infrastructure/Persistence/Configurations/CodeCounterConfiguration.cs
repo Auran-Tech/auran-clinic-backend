@@ -20,8 +20,17 @@ public sealed class CodeCounterConfiguration : IEntityTypeConfiguration<CodeCoun
         builder.Property(x => x.Prefix)
             .HasMaxLength(20);
 
-        builder.HasIndex(x => new { x.Scope, x.ClinicId, x.CodeType, x.Prefix, x.Year })
-            .IsUnique();
+        // SQL Server automatically filters a unique index containing a nullable
+        // column, which would leave Platform counters (ClinicId = NULL) unprotected.
+        // Keep separate filtered unique indexes so both platform and clinic
+        // counters are concurrency-safe at the database level.
+        builder.HasIndex(x => new { x.Scope, x.CodeType, x.Prefix, x.Year })
+            .IsUnique()
+            .HasFilter("[ClinicId] IS NULL");
+
+        builder.HasIndex(x => new { x.ClinicId, x.CodeType, x.Prefix, x.Year })
+            .IsUnique()
+            .HasFilter("[ClinicId] IS NOT NULL");
 
         builder.HasOne<ClinicEntity>()
             .WithMany()
