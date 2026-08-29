@@ -20,6 +20,21 @@ public sealed class FileService(
     IOptions<FileStorageOptions> fileStorageOptions,
     IHttpContextAccessor httpContextAccessor) : IFileService
 {
+    private static readonly HashSet<string> BrandingContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png",
+        "image/jpeg",
+        "image/webp"
+    };
+
+    private static readonly HashSet<string> BrandingExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp"
+    };
+
     private readonly FileStorageOptions options = fileStorageOptions.Value;
 
     public async Task<FileUploadSessionResponse?> CreateUploadSessionAsync(
@@ -28,51 +43,22 @@ public sealed class FileService(
     {
         if (!TryGetClinicActor(out var clinicId, out var userId))
             return null;
-        if (request.Size > options.MaxFileSizeBytes)
-            throw new InvalidOperationException($"File size exceeds the configured limit of {options.MaxFileSizeMb} MB.");
-        if (options.Provider != storageProvider.Provider)
-            throw new InvalidOperationException($"File storage provider '{options.Provider}' is not configured.");
 
-        var originalName = Path.GetFileName(request.FileName.Trim());
-        if (string.IsNullOrWhiteSpace(originalName))
-            throw new InvalidOperationException("A valid file name is required.");
+        return await CreateUploadSessionCoreAsync(clinicId, userId, request, "files", cancellationToken);
+    }
 
-        var extension = Path.GetExtension(originalName).ToLowerInvariant();
-        if (extension.Length > 20)
-            throw new InvalidOperationException("File extension is too long.");
+    public async Task<FileUploadSessionResponse?> CreateClinicBrandingUploadSessionAsync(
+        Guid clinicId,
+        CreateFileUploadSessionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetPlatformActor(out var platformUserId))
+            return null;
+        if (!await dbContext.Clinics.AsNoTracking().AnyAsync(x => x.Id == clinicId, cancellationToken))
+            return null;
 
-        var sessionId = Guid.NewGuid();
-        var uploadToken = GenerateToken();
-        var now = DateTime.UtcNow;
-        var storageKey = BuildStorageKey(clinicId, sessionId, extension, now);
-        var session = new FileUploadSession
-        {
-            Id = sessionId,
-            ClinicId = clinicId,
-            RequestedByUserId = userId,
-            OriginalName = originalName,
-            FileExtension = extension,
-            ContentType = request.ContentType.Trim(),
-            ExpectedSize = request.Size,
-            StorageProvider = storageProvider.Provider,
-            StorageKey = storageKey,
-            UploadTokenHash = HashToken(uploadToken),
-            Status = FileUploadStatus.Pending,
-            ExpiresAtUtc = now.AddMinutes(Math.Clamp(options.UploadSessionMinutes, 1, 120))
-        };
-
-        dbContext.Set<FileUploadSession>().Add(session);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return new FileUploadSessionResponse
-        {
-            SessionId = session.Id,
-            UploadUrl = BuildUploadUrl(session.Id, uploadToken),
-            ExpiresAtUtc = session.ExpiresAtUtc,
-            StorageProvider = session.StorageProvider,
-            ExpectedSize = session.ExpectedSize,
-            UploadToken = uploadToken
-        };
+        ValidateBrandingImage(request);
+        return await CreateUploadSessionCoreAsync(clinicId, platformUserId, request, "branding", cancellationToken);
     }
 
     public async Task<FileUploadContentResult> UploadContentAsync(
@@ -134,90 +120,25 @@ public sealed class FileService(
         return new FileUploadContentResult { Succeeded = true };
     }
 
-    public async Task<FileResponse?> CompleteUploadAsync(
-        Guid sessionId,
-        CancellationToken cancellationToken = default)
+    public async Task<FileResponse?> CompleteUploadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         if (!TryGetClinicActor(out var clinicId, out var userId))
             return null;
 
-        var session = await dbContext.Set<FileUploadSession>()
-            .SingleOrDefaultAsync(
-                x => x.Id == sessionId && x.ClinicId == clinicId && x.RequestedByUserId == userId,
-                cancellationToken);
-        if (session is null)
+        return await CompleteUploadCoreAsync(clinicId, userId, sessionId, "files", cancellationToken);
+    }
+
+    public async Task<FileResponse?> CompleteClinicBrandingUploadAsync(
+        Guid clinicId,
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetPlatformActor(out var platformUserId))
+            return null;
+        if (!await dbContext.Clinics.AsNoTracking().AnyAsync(x => x.Id == clinicId, cancellationToken))
             return null;
 
-        if (session.Status == FileUploadStatus.Completed && session.FileId.HasValue)
-        {
-            var completedFile = await dbContext.Files.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.Id == session.FileId.Value && x.ClinicId == clinicId, cancellationToken);
-            return completedFile is null ? null : Map(completedFile);
-        }
-
-        var now = DateTime.UtcNow;
-        if (session.ExpiresAtUtc <= now)
-        {
-            session.Status = FileUploadStatus.Expired;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            throw new InvalidOperationException("Upload session has expired.");
-        }
-        if (session.Status != FileUploadStatus.Uploaded)
-            throw new InvalidOperationException("File content must be uploaded before completing the session.");
-
-        var storedSize = await storageProvider.GetSizeAsync(session.StorageKey, cancellationToken);
-        if (storedSize != session.ExpectedSize)
-        {
-            session.Status = FileUploadStatus.Failed;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await storageProvider.DeleteIfExistsAsync(session.StorageKey, cancellationToken);
-            throw new InvalidOperationException("Stored file size does not match the upload session.");
-        }
-
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            var file = new FileRecord
-            {
-                Id = Guid.NewGuid(),
-                ClinicId = clinicId,
-                OriginalName = session.OriginalName,
-                StoredName = Path.GetFileName(session.StorageKey),
-                FileExtension = session.FileExtension,
-                ContentType = session.ContentType,
-                Size = session.ExpectedSize,
-                StorageProvider = session.StorageProvider,
-                StorageKey = session.StorageKey,
-                UploadedAtUtc = session.UploadedAtUtc ?? now,
-                UploadedByUserId = userId
-            };
-            dbContext.Files.Add(file);
-
-            session.Status = FileUploadStatus.Completed;
-            session.CompletedAtUtc = now;
-            session.FileId = file.Id;
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            await auditService.WriteAsync(new AuditEvent
-            {
-                Scope = AuditScope.Clinic,
-                ClinicId = clinicId,
-                Action = "File.UploadCompleted",
-                Category = "File",
-                EntityType = nameof(FileRecord),
-                EntityId = file.Id.ToString(),
-                Description = "File upload session completed and a permanent file record was created.",
-                Metadata = new { file.OriginalName, file.FileExtension, file.ContentType, file.Size, file.StorageProvider }
-            }, cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-            return Map(file);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+        return await CompleteUploadCoreAsync(clinicId, platformUserId, sessionId, "branding", cancellationToken);
     }
 
     public async Task<FileResponse?> GetAsync(Guid fileId, CancellationToken cancellationToken = default)
@@ -264,6 +185,159 @@ public sealed class FileService(
         };
     }
 
+    private async Task<FileUploadSessionResponse> CreateUploadSessionCoreAsync(
+        Guid clinicId,
+        Guid requesterId,
+        CreateFileUploadSessionRequest request,
+        string storageCategory,
+        CancellationToken cancellationToken)
+    {
+        if (request.Size > options.MaxFileSizeBytes)
+            throw new InvalidOperationException($"File size exceeds the configured limit of {options.MaxFileSizeMb} MB.");
+        if (options.Provider != storageProvider.Provider)
+            throw new InvalidOperationException($"File storage provider '{options.Provider}' is not configured.");
+
+        var originalName = Path.GetFileName(request.FileName.Trim());
+        if (string.IsNullOrWhiteSpace(originalName))
+            throw new InvalidOperationException("A valid file name is required.");
+
+        var extension = Path.GetExtension(originalName).ToLowerInvariant();
+        if (extension.Length > 20)
+            throw new InvalidOperationException("File extension is too long.");
+
+        var sessionId = Guid.NewGuid();
+        var uploadToken = GenerateToken();
+        var now = DateTime.UtcNow;
+        var storageKey = BuildStorageKey(clinicId, storageCategory, sessionId, extension, now);
+        var session = new FileUploadSession
+        {
+            Id = sessionId,
+            ClinicId = clinicId,
+            RequestedByUserId = requesterId,
+            OriginalName = originalName,
+            FileExtension = extension,
+            ContentType = request.ContentType.Trim(),
+            ExpectedSize = request.Size,
+            StorageProvider = storageProvider.Provider,
+            StorageKey = storageKey,
+            UploadTokenHash = HashToken(uploadToken),
+            Status = FileUploadStatus.Pending,
+            ExpiresAtUtc = now.AddMinutes(Math.Clamp(options.UploadSessionMinutes, 1, 120))
+        };
+
+        dbContext.Set<FileUploadSession>().Add(session);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new FileUploadSessionResponse
+        {
+            SessionId = session.Id,
+            UploadUrl = BuildUploadUrl(session.Id, uploadToken),
+            ExpiresAtUtc = session.ExpiresAtUtc,
+            StorageProvider = session.StorageProvider,
+            ExpectedSize = session.ExpectedSize,
+            UploadToken = uploadToken
+        };
+    }
+
+    private async Task<FileResponse?> CompleteUploadCoreAsync(
+        Guid clinicId,
+        Guid requesterId,
+        Guid sessionId,
+        string requiredStorageCategory,
+        CancellationToken cancellationToken)
+    {
+        var expectedStoragePrefix = $"{clinicId:N}/{requiredStorageCategory}/";
+        var session = await dbContext.Set<FileUploadSession>()
+            .SingleOrDefaultAsync(
+                x => x.Id == sessionId
+                     && x.ClinicId == clinicId
+                     && x.RequestedByUserId == requesterId
+                     && x.StorageKey.StartsWith(expectedStoragePrefix),
+                cancellationToken);
+        if (session is null)
+            return null;
+
+        if (session.Status == FileUploadStatus.Completed && session.FileId.HasValue)
+        {
+            var completedFile = await dbContext.Files.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == session.FileId.Value && x.ClinicId == clinicId, cancellationToken);
+            return completedFile is null ? null : Map(completedFile);
+        }
+
+        var now = DateTime.UtcNow;
+        if (session.ExpiresAtUtc <= now)
+        {
+            session.Status = FileUploadStatus.Expired;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw new InvalidOperationException("Upload session has expired.");
+        }
+        if (session.Status != FileUploadStatus.Uploaded)
+            throw new InvalidOperationException("File content must be uploaded before completing the session.");
+
+        var storedSize = await storageProvider.GetSizeAsync(session.StorageKey, cancellationToken);
+        if (storedSize != session.ExpectedSize)
+        {
+            session.Status = FileUploadStatus.Failed;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await storageProvider.DeleteIfExistsAsync(session.StorageKey, cancellationToken);
+            throw new InvalidOperationException("Stored file size does not match the upload session.");
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var file = new FileRecord
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                OriginalName = session.OriginalName,
+                StoredName = Path.GetFileName(session.StorageKey),
+                FileExtension = session.FileExtension,
+                ContentType = session.ContentType,
+                Size = session.ExpectedSize,
+                StorageProvider = session.StorageProvider,
+                StorageKey = session.StorageKey,
+                UploadedAtUtc = session.UploadedAtUtc ?? now,
+                UploadedByUserId = requesterId
+            };
+            dbContext.Files.Add(file);
+
+            session.Status = FileUploadStatus.Completed;
+            session.CompletedAtUtc = now;
+            session.FileId = file.Id;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await auditService.WriteAsync(new AuditEvent
+            {
+                Scope = AuditScope.Clinic,
+                ClinicId = clinicId,
+                Action = requiredStorageCategory == "branding" ? "ClinicBranding.UploadCompleted" : "File.UploadCompleted",
+                Category = requiredStorageCategory == "branding" ? "ClinicBranding" : "File",
+                EntityType = nameof(FileRecord),
+                EntityId = file.Id.ToString(),
+                Description = requiredStorageCategory == "branding"
+                    ? "A Platform user uploaded a clinic branding image."
+                    : "File upload session completed and a permanent file record was created.",
+                Metadata = new { file.OriginalName, file.FileExtension, file.ContentType, file.Size, file.StorageProvider }
+            }, cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+            return Map(file);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static void ValidateBrandingImage(CreateFileUploadSessionRequest request)
+    {
+        var extension = Path.GetExtension(Path.GetFileName(request.FileName.Trim()));
+        if (!BrandingContentTypes.Contains(request.ContentType.Trim()) || !BrandingExtensions.Contains(extension))
+            throw new InvalidOperationException("Clinic branding uploads support PNG, JPEG and WEBP images only.");
+    }
+
     private FileResponse Map(FileRecord file) => new()
     {
         Id = file.Id,
@@ -286,6 +360,14 @@ public sealed class FileService(
             && userId != Guid.Empty;
     }
 
+    private bool TryGetPlatformActor(out Guid userId)
+    {
+        userId = currentActor.PlatformUserId ?? Guid.Empty;
+        return currentActor.IsAuthenticated
+            && currentActor.ActorType == ActorType.Platform
+            && userId != Guid.Empty;
+    }
+
     private string BuildUploadUrl(Guid sessionId, string uploadToken)
     {
         var relative = $"/api/files/upload-sessions/{sessionId}/content?token={uploadToken}";
@@ -302,8 +384,8 @@ public sealed class FileService(
         return $"{request.Scheme}://{request.Host}{request.PathBase}{relative}";
     }
 
-    private static string BuildStorageKey(Guid clinicId, Guid sessionId, string extension, DateTime now) =>
-        $"{clinicId:N}/{now:yyyy}/{now:MM}/{sessionId:N}{extension}";
+    private static string BuildStorageKey(Guid clinicId, string storageCategory, Guid sessionId, string extension, DateTime now) =>
+        $"{clinicId:N}/{storageCategory}/{now:yyyy}/{now:MM}/{sessionId:N}{extension}";
 
     private static string GenerateToken()
     {

@@ -42,6 +42,8 @@ public sealed class PlatformClinicService(
             var permissions = await catalogService.EnsurePermissionsAsync(cancellationToken);
             var features = await catalogService.EnsureFeaturesAsync(cancellationToken);
             var clinicCode = await GenerateUniqueClinicCodeAsync(request.CodePrefix, cancellationToken);
+            var timeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId)
+                ?? throw new InvalidOperationException("TimeZoneId is not supported.");
 
             var clinic = new Domain.Entities.Clinic
             {
@@ -55,7 +57,7 @@ public sealed class PlatformClinicService(
                 FontFamily = Clean(request.FontFamily),
                 WelcomeTitle = Clean(request.WelcomeTitle),
                 WelcomeMessage = Clean(request.WelcomeMessage),
-                TimeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId) ?? "UTC",
+                TimeZoneId = timeZoneId,
                 PatientNumberPrefix = request.PatientNumberPrefix.Trim().ToUpperInvariant()
             };
             dbContext.Clinics.Add(clinic);
@@ -64,13 +66,13 @@ public sealed class PlatformClinicService(
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic.Id,
-                Phone = Clean(request.Phone),
-                Email = Clean(request.Email),
-                Address = Clean(request.Address),
-                CountryCode = Clean(request.CountryCode)?.ToUpperInvariant(),
-                CityCode = Clean(request.CityCode)?.ToUpperInvariant(),
+                Phone = request.Phone.Trim(),
+                Email = request.Email.Trim().ToLowerInvariant(),
+                Address = request.Address.Trim(),
+                CountryCode = request.CountryCode.Trim().ToUpperInvariant(),
+                CityCode = request.CityCode.Trim().ToUpperInvariant(),
                 Website = Clean(request.Website),
-                Locale = Clean(request.Locale) ?? "en",
+                Locale = request.Locale.Trim(),
                 DateFormat = "yyyy-MM-dd",
                 TimeFormat = "HH:mm",
                 DocumentationReminderHours = 12,
@@ -256,6 +258,9 @@ public sealed class PlatformClinicService(
             dbContext.ClinicSettings.Add(settings);
         }
 
+        var timeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId)
+            ?? throw new InvalidOperationException("TimeZoneId is not supported.");
+
         clinic.Name = request.Name.Trim();
         clinic.LogoUrl = Clean(request.LogoUrl);
         clinic.PrimaryColor = Clean(request.PrimaryColor);
@@ -263,10 +268,17 @@ public sealed class PlatformClinicService(
         clinic.FontFamily = Clean(request.FontFamily);
         clinic.WelcomeTitle = Clean(request.WelcomeTitle);
         clinic.WelcomeMessage = Clean(request.WelcomeMessage);
-        clinic.TimeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId) ?? "UTC";
+        clinic.TimeZoneId = timeZoneId;
         clinic.PatientNumberPrefix = request.PatientNumberPrefix.Trim().ToUpperInvariant();
-        settings.CountryCode = Clean(request.CountryCode)?.ToUpperInvariant();
-        settings.CityCode = Clean(request.CityCode)?.ToUpperInvariant();
+
+        settings.Phone = request.Phone.Trim();
+        settings.Email = request.Email.Trim().ToLowerInvariant();
+        settings.Address = request.Address.Trim();
+        settings.CountryCode = request.CountryCode.Trim().ToUpperInvariant();
+        settings.CityCode = request.CityCode.Trim().ToUpperInvariant();
+        settings.Website = Clean(request.Website);
+        settings.Locale = request.Locale.Trim();
+        settings.WelcomeButtonText = Clean(request.WelcomeButtonText) ?? "Continue";
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;

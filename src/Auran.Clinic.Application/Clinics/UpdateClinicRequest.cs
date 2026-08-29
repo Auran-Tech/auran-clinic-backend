@@ -9,8 +9,14 @@ public sealed class UpdateClinicRequest
     public string? FontFamily { get; set; }
     public string? WelcomeTitle { get; set; }
     public string? WelcomeMessage { get; set; }
-    public string? TimeZoneId { get; set; }
-    public string? CountryCode { get; set; }
-    public string? CityCode { get; set; }
+    public string? WelcomeButtonText { get; set; }
+    public required string TimeZoneId { get; set; }
+    public required string CountryCode { get; set; }
+    public required string CityCode { get; set; }
     public required string PatientNumberPrefix { get; set; }
+    public required string Locale { get; set; }
+    public required string Phone { get; set; }
+    public required string Email { get; set; }
+    public required string Address { get; set; }
+    public string? Website { get; set; }
 }

@@ -1,10 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Auran.Clinic.Infrastructure.Auditing;
 
 internal static class AuditRedactor
 {
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
     private static readonly string[] SensitiveNameFragments =
     {
         "password",
@@ -24,9 +27,16 @@ internal static class AuditRedactor
         if (value is null)
             return null;
 
-        var node = JsonSerializer.SerializeToNode(value);
+        var node = JsonSerializer.SerializeToNode(value, JsonOptions);
         Redact(node);
-        return node?.ToJsonString();
+        return node?.ToJsonString(JsonOptions);
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions();
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
     }
 
     private static bool IsSensitive(string propertyName) =>

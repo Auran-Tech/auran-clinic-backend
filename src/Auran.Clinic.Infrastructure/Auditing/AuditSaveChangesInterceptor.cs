@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Domain.Common;
 using Auran.Clinic.Domain.Entities;
@@ -75,7 +74,7 @@ public sealed class AuditSaveChangesInterceptor(
                 EntityId = entry.Entity.Id == Guid.Empty ? null : entry.Entity.Id.ToString(),
                 Description = $"{entry.Entity.GetType().Name} {action.ToLowerInvariant()} operation.",
                 OccurredAtUtc = now,
-                MetadataJson = JsonSerializer.Serialize(BuildMetadata(entry)),
+                MetadataJson = AuditRedactor.Serialize(BuildMetadata(entry)),
                 IpAddress = httpContext?.Connection.RemoteIpAddress?.ToString(),
                 UserAgent = httpContext?.Request.Headers["User-Agent"].ToString(),
                 CorrelationId = httpContext?.TraceIdentifier,

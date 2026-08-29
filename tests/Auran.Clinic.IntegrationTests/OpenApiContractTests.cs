@@ -45,6 +45,8 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal("PlatformClinics_SetStatus", GetOperationId(paths, "/api/platform/clinics/{id}/status", "put"));
         Assert.Equal("PlatformClinicFeatures_Get", GetOperationId(paths, "/api/platform/clinics/{id}/features", "get"));
         Assert.Equal("PlatformClinicFeatures_Update", GetOperationId(paths, "/api/platform/clinics/{id}/features", "put"));
+        Assert.Equal("PlatformClinicBranding_CreateUploadSession", GetOperationId(paths, "/api/platform/clinics/{id}/branding/upload-sessions", "post"));
+        Assert.Equal("PlatformClinicBranding_CompleteUploadSession", GetOperationId(paths, "/api/platform/clinics/{id}/branding/upload-sessions/{sessionId}/complete", "post"));
         Assert.Equal("PlatformAuditLogs_Search", GetOperationId(paths, "/api/platform/audit-logs", "get"));
     }
 

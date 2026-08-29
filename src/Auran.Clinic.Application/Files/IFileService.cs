@@ -6,6 +6,11 @@ public interface IFileService
         CreateFileUploadSessionRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<FileUploadSessionResponse?> CreateClinicBrandingUploadSessionAsync(
+        Guid clinicId,
+        CreateFileUploadSessionRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<FileUploadContentResult> UploadContentAsync(
         Guid sessionId,
         string uploadToken,
@@ -15,6 +20,11 @@ public interface IFileService
         CancellationToken cancellationToken = default);
 
     Task<FileResponse?> CompleteUploadAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default);
+
+    Task<FileResponse?> CompleteClinicBrandingUploadAsync(
+        Guid clinicId,
         Guid sessionId,
         CancellationToken cancellationToken = default);
 
