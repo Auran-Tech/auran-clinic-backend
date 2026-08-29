@@ -35,7 +35,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("refresh")]
     [SwaggerOperation(
         Summary = "Rotate a clinic refresh token",
-        Description = "Exchanges a valid clinic refresh token for a new clinic JWT and replacement refresh token. Suspended clinics cannot refresh sessions.",
+        Description = "Exchanges a valid clinic refresh token for a new clinic JWT and replacement refresh token. Rotation revokes the previous session, so its access token can no longer authorize protected endpoints. Suspended clinics cannot refresh sessions.",
         OperationId = "Auth_RefreshToken",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
@@ -54,7 +54,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("logout")]
     [SwaggerOperation(
         Summary = "Log out a clinic user",
-        Description = "Revokes the supplied clinic refresh token. Requires a valid active-clinic JWT.",
+        Description = "Revokes the supplied clinic authentication session. The access token associated with that session becomes invalid immediately for protected endpoints. Requires a valid active-clinic JWT.",
         OperationId = "Auth_Logout",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
