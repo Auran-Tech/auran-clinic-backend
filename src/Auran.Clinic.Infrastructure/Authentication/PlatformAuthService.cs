@@ -54,13 +54,19 @@ public sealed class PlatformAuthService(
         RefreshTokenRequest request,
         CancellationToken cancellationToken = default)
     {
-        var tokenHash = HashToken(request.RefreshToken);
-        var refreshToken = await dbContext.PlatformRefreshTokens
-            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-        if (refreshToken is null || !refreshToken.IsActive)
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return null;
 
-        var platformUser = await dbContext.PlatformUsers
+        var rawRefreshToken = request.RefreshToken.Trim();
+        var tokenHash = HashToken(rawRefreshToken);
+        var now = DateTime.UtcNow;
+
+        var refreshToken = await dbContext.PlatformRefreshTokens.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (refreshToken is null || refreshToken.RevokedDate is not null || refreshToken.ExpiresDate <= now)
+            return null;
+
+        var platformUser = await dbContext.PlatformUsers.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == refreshToken.PlatformUserId && x.IsActive, cancellationToken);
         if (platformUser is null)
             return null;
@@ -69,25 +75,56 @@ public sealed class PlatformAuthService(
         if (identityUser is null || identityUser.AccountType != AccountType.Platform)
             return null;
 
-        refreshToken.RevokedDate = DateTime.UtcNow;
-        var response = await CreateSessionAsync(
-            platformUser,
-            identityUser,
-            cancellationToken,
-            saveChanges: false);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var revokedRows = await dbContext.PlatformRefreshTokens
+                .Where(x => x.Id == refreshToken.Id && x.RevokedDate == null && x.ExpiresDate > now)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.RevokedDate, now),
+                    cancellationToken);
 
-        refreshToken.ReplacedByTokenHash = HashToken(response.RefreshToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+            if (revokedRows != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
 
-        await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.TokenRefreshed",
-            "Platform access and refresh tokens were rotated successfully.", cancellationToken);
+            var response = await CreateSessionAsync(
+                platformUser,
+                identityUser,
+                cancellationToken,
+                saveChanges: false);
 
-        return response;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var replacementHash = HashToken(response.RefreshToken);
+            await dbContext.PlatformRefreshTokens
+                .Where(x => x.Id == refreshToken.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.ReplacedByTokenHash, replacementHash),
+                    cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+
+            await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.TokenRefreshed",
+                "Platform access and refresh tokens were rotated successfully.", cancellationToken);
+
+            return response;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        var tokenHash = HashToken(refreshToken);
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            return;
+
+        var tokenHash = HashToken(refreshToken.Trim());
         var entity = await dbContext.PlatformRefreshTokens
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
@@ -136,15 +173,18 @@ public sealed class PlatformAuthService(
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var expiresDate = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
+        var now = DateTime.UtcNow;
+        var expiresDate = now.AddMinutes(_jwt.AccessTokenMinutes);
         var accessToken = CreateAccessToken(platformUser, identityUser, roles, permissions, expiresDate);
-        var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var rawRefreshToken = CreateRefreshToken();
 
         dbContext.PlatformRefreshTokens.Add(new PlatformRefreshToken
         {
+            Id = Guid.NewGuid(),
             PlatformUserId = platformUser.Id,
             TokenHash = HashToken(rawRefreshToken),
-            ExpiresDate = DateTime.UtcNow.AddDays(_jwt.RefreshTokenDays)
+            ExpiresDate = now.AddDays(_jwt.RefreshTokenDays),
+            CreatedDate = now
         });
 
         if (saveChanges)
@@ -220,6 +260,12 @@ public sealed class PlatformAuthService(
             Description = description
         }, cancellationToken);
 
+    private static string CreateRefreshToken() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
     private static string HashToken(string token) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token.Trim())));
 }
