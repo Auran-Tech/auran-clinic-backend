@@ -25,7 +25,9 @@ public static class SystemRoleCatalog
                 Permissions.Clinic.Queue.Manage,
                 Permissions.Clinic.Visits.View,
                 Permissions.Clinic.Visits.Create,
-                Permissions.Clinic.FollowUps.View
+                Permissions.Clinic.FollowUps.View,
+                Permissions.Clinic.Files.View,
+                Permissions.Clinic.Files.Upload
             }),
         new SystemRoleDefinition(
             Doctor,
@@ -40,7 +42,9 @@ public static class SystemRoleCatalog
                 Permissions.Clinic.Clinical.Manage,
                 Permissions.Clinic.FollowUps.View,
                 Permissions.Clinic.FollowUps.Manage,
-                Permissions.Clinic.Reports.View
+                Permissions.Clinic.Reports.View,
+                Permissions.Clinic.Files.View,
+                Permissions.Clinic.Files.Upload
             }),
         new SystemRoleDefinition(
             Nurse,
@@ -52,7 +56,9 @@ public static class SystemRoleCatalog
                 Permissions.Clinic.Queue.Manage,
                 Permissions.Clinic.Visits.View,
                 Permissions.Clinic.Clinical.View,
-                Permissions.Clinic.Clinical.Manage
+                Permissions.Clinic.Clinical.Manage,
+                Permissions.Clinic.Files.View,
+                Permissions.Clinic.Files.Upload
             })
     };
 }

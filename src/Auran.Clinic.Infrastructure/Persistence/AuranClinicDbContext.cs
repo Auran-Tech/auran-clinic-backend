@@ -50,6 +50,7 @@ public class AuranClinicDbContext(DbContextOptions<AuranClinicDbContext> options
     public DbSet<ClinicalOrderSection> ClinicalOrderSections => Set<ClinicalOrderSection>();
     public DbSet<ClinicalOrderItem> ClinicalOrderItems => Set<ClinicalOrderItem>();
     public DbSet<FileRecord> Files => Set<FileRecord>();
+    public DbSet<FileUploadSession> FileUploadSessions => Set<FileUploadSession>();
     public DbSet<PatientAttachment> PatientAttachments => Set<PatientAttachment>();
     public DbSet<ClinicalOrderAttachment> ClinicalOrderAttachments => Set<ClinicalOrderAttachment>();
     public DbSet<FollowUp> FollowUps => Set<FollowUp>();

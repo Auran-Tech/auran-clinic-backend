@@ -4,6 +4,7 @@ using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Features;
+using Auran.Clinic.Application.Files;
 using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
@@ -11,6 +12,7 @@ using Auran.Clinic.Infrastructure.Caching;
 using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Codes;
 using Auran.Clinic.Infrastructure.Features;
+using Auran.Clinic.Infrastructure.Files;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Auran.Clinic.Infrastructure.Platform;
@@ -54,6 +56,7 @@ public static class DependencyInjection
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<PlatformBootstrapOptions>(configuration.GetSection(PlatformBootstrapOptions.SectionName));
+        services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
 
         var jwt = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is required.");
@@ -111,6 +114,8 @@ public static class DependencyInjection
         services.AddScoped<IClinicService, ClinicService>();
         services.AddScoped<IPlatformClinicService, PlatformClinicService>();
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
+        services.AddScoped<IFileService, FileService>();
+        services.AddSingleton<IFileStorageProvider, LocalFileStorageProvider>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IClinicAccessService, ClinicAccessService>();
         services.AddScoped<SystemCatalogService>();

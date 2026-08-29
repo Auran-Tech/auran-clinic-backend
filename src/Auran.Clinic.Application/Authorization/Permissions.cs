@@ -86,5 +86,11 @@ public static class Permissions
             public const string View = "Settings.View";
             public const string Manage = "Settings.Manage";
         }
+
+        public static class Files
+        {
+            public const string View = "Files.View";
+            public const string Upload = "Files.Upload";
+        }
     }
 }

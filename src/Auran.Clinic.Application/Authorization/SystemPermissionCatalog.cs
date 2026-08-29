@@ -34,7 +34,9 @@ public static class SystemPermissionCatalog
         new(Permissions.Clinic.Reports.View, "View reports", "Reports", PermissionScope.Clinic),
         new(Permissions.Clinic.Reports.Export, "Export reports", "Reports", PermissionScope.Clinic),
         new(Permissions.Clinic.Settings.View, "View clinic settings", "Settings", PermissionScope.Clinic),
-        new(Permissions.Clinic.Settings.Manage, "Manage clinic settings", "Settings", PermissionScope.Clinic)
+        new(Permissions.Clinic.Settings.Manage, "Manage clinic settings", "Settings", PermissionScope.Clinic),
+        new(Permissions.Clinic.Files.View, "View and download files", "Files", PermissionScope.Clinic),
+        new(Permissions.Clinic.Files.Upload, "Upload files", "Files", PermissionScope.Clinic)
     };
 
     public static IReadOnlyCollection<PermissionDefinition> Platform =>

@@ -23,6 +23,9 @@ Thumbs.db
 logs/
 *.log
 
+## Local file storage
+storage/
+
 ## Secrets / local configuration
 secrets.json
 appsettings.Local.json

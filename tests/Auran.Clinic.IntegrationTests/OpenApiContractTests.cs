@@ -77,6 +77,20 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         AssertAnonymous(GetOperation(paths, "/api/reference/fonts", "get"));
     }
 
+    [Fact]
+    public async Task SwaggerDocument_ExposesStableFileUploadOperations()
+    {
+        using var client = factory.CreateClient();
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
+
+        Assert.Equal("Files_CreateUploadSession", GetOperationId(paths, "/api/files/upload-sessions", "post"));
+        Assert.Equal("Files_UploadContent", GetOperationId(paths, "/api/files/upload-sessions/{id}/content", "put"));
+        Assert.Equal("Files_CompleteUploadSession", GetOperationId(paths, "/api/files/upload-sessions/{id}/complete", "post"));
+        Assert.Equal("Files_Get", GetOperationId(paths, "/api/files/{id}", "get"));
+        Assert.Equal("Files_Download", GetOperationId(paths, "/api/files/{id}/content", "get"));
+        AssertAnonymous(GetOperation(paths, "/api/files/upload-sessions/{id}/content", "put"));
+    }
+
     private static async Task<JsonElement> GetDocumentAsync(HttpClient client)
     {
         var response = await client.GetAsync("/swagger/v1/swagger.json");
