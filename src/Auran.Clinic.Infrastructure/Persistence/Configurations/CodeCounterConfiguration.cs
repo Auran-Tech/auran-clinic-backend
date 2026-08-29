@@ -1,6 +1,7 @@
 using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ClinicEntity = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Persistence.Configurations;
 
@@ -22,7 +23,7 @@ public sealed class CodeCounterConfiguration : IEntityTypeConfiguration<CodeCoun
         builder.HasIndex(x => new { x.Scope, x.ClinicId, x.CodeType, x.Prefix, x.Year })
             .IsUnique();
 
-        builder.HasOne<Clinic>()
+        builder.HasOne<ClinicEntity>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
