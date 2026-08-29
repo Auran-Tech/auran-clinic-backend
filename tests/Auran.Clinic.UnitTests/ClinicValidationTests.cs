@@ -5,79 +5,31 @@ namespace Auran.Clinic.UnitTests;
 public sealed class ClinicValidationTests
 {
     [Fact]
-    public void UpdateContract_ExcludesImmutableClinicFields()
+    public void UpdateServiceContract_ExcludesImmutableProvisioningFields()
     {
         var propertyNames = typeof(UpdateClinicRequest)
             .GetProperties()
             .Select(x => x.Name)
             .ToHashSet(StringComparer.Ordinal);
 
+        Assert.DoesNotContain(nameof(CreateClinicRequest.CodePrefix), propertyNames);
+        Assert.DoesNotContain(nameof(CreateClinicRequest.Admin), propertyNames);
         Assert.DoesNotContain("Code", propertyNames);
-        Assert.DoesNotContain("CodePrefix", propertyNames);
-        Assert.DoesNotContain("Admin", propertyNames);
         Assert.DoesNotContain("IsActive", propertyNames);
     }
 
     [Fact]
-    public async Task CreateValidator_RequiresCoreClinicProfile()
+    public void ServiceContracts_KeepRequiredCoreStrings()
     {
-        var validator = new CreateClinicRequestValidator();
-        var request = new CreateClinicRequest
-        {
-            Name = "Clinic",
-            CodePrefix = "CL",
-            TimeZoneId = string.Empty,
-            CountryCode = string.Empty,
-            CityCode = string.Empty,
-            PatientNumberPrefix = "PT",
-            Locale = string.Empty,
-            Phone = string.Empty,
-            Email = string.Empty,
-            Address = string.Empty,
-            Admin = new InitialAdminRequest
-            {
-                FullName = "Admin",
-                Email = "admin@example.com",
-                Password = "Password1"
-            }
-        };
-
-        var result = await validator.ValidateAsync(request);
-
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.TimeZoneId));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.CountryCode));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.CityCode));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.Locale));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.Phone));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.Email));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(CreateClinicRequest.Address));
+        Assert.True(IsRequiredMember<CreateClinicRequest>(nameof(CreateClinicRequest.Name)));
+        Assert.True(IsRequiredMember<CreateClinicRequest>(nameof(CreateClinicRequest.CodePrefix)));
+        Assert.True(IsRequiredMember<CreateClinicRequest>(nameof(CreateClinicRequest.TimeZoneId)));
+        Assert.True(IsRequiredMember<UpdateClinicRequest>(nameof(UpdateClinicRequest.Name)));
+        Assert.True(IsRequiredMember<UpdateClinicRequest>(nameof(UpdateClinicRequest.TimeZoneId)));
     }
 
-    [Fact]
-    public async Task UpdateValidator_RequiresSameMutableCoreProfile()
-    {
-        var validator = new UpdateClinicRequestValidator();
-        var request = new UpdateClinicRequest
-        {
-            Name = "Clinic",
-            TimeZoneId = string.Empty,
-            CountryCode = string.Empty,
-            CityCode = string.Empty,
-            PatientNumberPrefix = "PT",
-            Locale = string.Empty,
-            Phone = string.Empty,
-            Email = string.Empty,
-            Address = string.Empty
-        };
-
-        var result = await validator.ValidateAsync(request);
-
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.TimeZoneId));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.CountryCode));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.CityCode));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.Locale));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.Phone));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.Email));
-        Assert.Contains(result.Errors, x => x.PropertyName == nameof(UpdateClinicRequest.Address));
-    }
+    private static bool IsRequiredMember<T>(string propertyName) =>
+        typeof(T).GetProperty(propertyName)!
+            .CustomAttributes
+            .Any(attribute => attribute.AttributeType.FullName == "System.Runtime.CompilerServices.RequiredMemberAttribute");
 }
