@@ -1,9 +1,12 @@
+using Auran.Clinic.Api.Contracts.Clinics;
+using Auran.Clinic.Api.Contracts.Features;
+using Auran.Clinic.Api.Contracts.Files;
+using Auran.Clinic.Api.Mappings;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Features;
 using Auran.Clinic.Application.Files;
 using Auran.Clinic.Application.Models;
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -16,12 +19,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Authorize(Policy = ActorPolicies.Platform)]
 public sealed class PlatformClinicsController(
     IPlatformClinicService clinicService,
-    IFileService fileService,
-    IValidator<CreateClinicRequest> createValidator,
-    IValidator<UpdateClinicRequest> updateValidator,
-    IValidator<ClinicSearchRequest> searchValidator,
-    IValidator<UpdateClinicFeaturesRequest> featuresValidator,
-    IValidator<CreateFileUploadSessionRequest> fileUploadValidator) : ControllerBase
+    IFileService fileService) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Create)]
@@ -35,14 +33,10 @@ public sealed class PlatformClinicsController(
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BaseResponse<ClinicDetailsResponse>>> Create(
-        [FromBody] CreateClinicRequest request,
+        [FromBody] CreateClinicApiRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = await createValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(Error("Validation failed.", validation.Errors.Select(x => x.ErrorMessage)));
-
-        var result = await clinicService.CreateAsync(request, cancellationToken);
+        var result = await clinicService.CreateAsync(request.ToServiceRequest(), cancellationToken);
         if (!result.Succeeded)
         {
             var response = Error(result.Error ?? "Clinic provisioning failed.");
@@ -61,18 +55,15 @@ public sealed class PlatformClinicsController(
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.View)]
     [SwaggerOperation(Summary = "Search clinics", Description = "Platform-only paginated clinic search across tenants. Supports text and active-state filters and does not expose clinical patient data.", OperationId = "PlatformClinics_Search", Tags = new[] { "Platform Clinics" })]
     [ProducesResponseType(typeof(BaseResponse<PaginatedResponse<ClinicSummaryResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BaseResponse<PaginatedResponse<ClinicSummaryResponse>>>> Search(
-        [FromQuery] ClinicSearchRequest request,
+        [FromQuery] ClinicSearchApiRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = await searchValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(Error("Validation failed.", validation.Errors.Select(x => x.ErrorMessage)));
-
         return Ok(new BaseResponse<PaginatedResponse<ClinicSummaryResponse>>
         {
             Status = true,
-            Data = await clinicService.SearchAsync(request, cancellationToken)
+            Data = await clinicService.SearchAsync(request.ToServiceRequest(), cancellationToken)
         });
     }
 
@@ -94,15 +85,15 @@ public sealed class PlatformClinicsController(
         Description = "Replaces the mutable clinic administration data using the same core clinic profile fields used during creation. Generated Clinic.Code, CodePrefix, clinic Id, initial Admin credentials and activation state are intentionally not accepted here and cannot be changed by this operation.",
         OperationId = "PlatformClinics_Update",
         Tags = new[] { "Platform Clinics" })]
-    public async Task<ActionResult<BaseResponse>> Update(Guid id, [FromBody] UpdateClinicRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BaseResponse>> Update(
+        Guid id,
+        [FromBody] UpdateClinicApiRequest request,
+        CancellationToken cancellationToken)
     {
-        var validation = await updateValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(Error("Validation failed.", validation.Errors.Select(x => x.ErrorMessage)));
-
         try
         {
-            return await clinicService.UpdateAsync(id, request, cancellationToken)
+            return await clinicService.UpdateAsync(id, request.ToServiceRequest(), cancellationToken)
                 ? Ok(new BaseResponse { Status = true, Message = "Clinic updated successfully." })
                 : NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." });
         }
@@ -124,16 +115,12 @@ public sealed class PlatformClinicsController(
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BaseResponse<FileUploadSessionResponse>>> CreateBrandingUploadSession(
         Guid id,
-        [FromBody] CreateFileUploadSessionRequest request,
+        [FromBody] CreateFileUploadSessionApiRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = await fileUploadValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(Error("Validation failed.", validation.Errors.Select(x => x.ErrorMessage)));
-
         try
         {
-            var result = await fileService.CreateClinicBrandingUploadSessionAsync(id, request, cancellationToken);
+            var result = await fileService.CreateClinicBrandingUploadSessionAsync(id, request.ToServiceRequest(), cancellationToken);
             return result is null
                 ? NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." })
                 : StatusCode(StatusCodes.Status201Created, new BaseResponse<FileUploadSessionResponse>
@@ -185,10 +172,15 @@ public sealed class PlatformClinicsController(
     [HttpPut("{id:guid}/status")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.SetStatus)]
     [SwaggerOperation(Summary = "Set clinic status", Description = "Activates or suspends a clinic. Suspension is enforced on subsequent clinic requests, including requests using previously issued JWTs, through the centralized clinic access guard.", OperationId = "PlatformClinics_SetStatus", Tags = new[] { "Platform Clinics" })]
-    public async Task<ActionResult<BaseResponse>> SetStatus(Guid id, [FromBody] SetClinicStatusRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BaseResponse>> SetStatus(
+        Guid id,
+        [FromBody] SetClinicStatusApiRequest request,
+        CancellationToken cancellationToken)
     {
-        return await clinicService.SetActiveAsync(id, request.IsActive, cancellationToken)
-            ? Ok(new BaseResponse { Status = true, Message = request.IsActive ? "Clinic activated." : "Clinic suspended." })
+        var serviceRequest = request.ToServiceRequest();
+        return await clinicService.SetActiveAsync(id, serviceRequest.IsActive, cancellationToken)
+            ? Ok(new BaseResponse { Status = true, Message = serviceRequest.IsActive ? "Clinic activated." : "Clinic suspended." })
             : NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." });
     }
 
@@ -206,21 +198,22 @@ public sealed class PlatformClinicsController(
     [HttpPut("{id:guid}/features")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.ManageFeatures)]
     [SwaggerOperation(Summary = "Update clinic features", Description = "Platform-only feature entitlement management. Feature state is independent from clinic RBAC permissions and cache entries are invalidated immediately after changes.", OperationId = "PlatformClinicFeatures_Update", Tags = new[] { "Platform Clinics" })]
-    public async Task<ActionResult<BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>>>> UpdateFeatures(Guid id, [FromBody] UpdateClinicFeaturesRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>>>> UpdateFeatures(
+        Guid id,
+        [FromBody] UpdateClinicFeaturesApiRequest request,
+        CancellationToken cancellationToken)
     {
-        var validation = await featuresValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(Error("Validation failed.", validation.Errors.Select(x => x.ErrorMessage)));
-        var result = await clinicService.UpdateFeaturesAsync(id, request, cancellationToken);
+        var result = await clinicService.UpdateFeaturesAsync(id, request.ToServiceRequest(), cancellationToken);
         return result is null
             ? NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." })
             : Ok(new BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>> { Status = true, Data = result });
     }
 
-    private static BaseResponse Error(string message, IEnumerable<string>? errors = null) => new()
+    private static BaseResponse Error(string message) => new()
     {
         Status = false,
         Message = message,
-        Error = errors is null ? message : string.Join(" ", errors)
+        Error = message
     };
 }
