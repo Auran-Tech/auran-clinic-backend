@@ -35,7 +35,7 @@ public sealed class PlatformAuthController(IPlatformAuthService authService) : C
     [HttpPost("refresh")]
     [SwaggerOperation(
         Summary = "Rotate a platform refresh token",
-        Description = "Rotates a valid AURAN platform refresh token and returns a replacement platform session.",
+        Description = "Rotates a valid AURAN platform refresh token and returns a replacement platform session. Rotation revokes the previous session, so its access token can no longer authorize protected platform endpoints.",
         OperationId = "PlatformAuth_RefreshToken",
         Tags = new[] { "Platform Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<PlatformAuthResponse>), StatusCodes.Status200OK)]
@@ -54,7 +54,7 @@ public sealed class PlatformAuthController(IPlatformAuthService authService) : C
     [HttpPost("logout")]
     [SwaggerOperation(
         Summary = "Log out a platform user",
-        Description = "Revokes the supplied platform refresh token. Requires a valid platform JWT.",
+        Description = "Revokes the supplied platform authentication session. The access token associated with that session becomes invalid immediately for protected platform endpoints. Requires a valid platform JWT.",
         OperationId = "PlatformAuth_Logout",
         Tags = new[] { "Platform Authentication" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
