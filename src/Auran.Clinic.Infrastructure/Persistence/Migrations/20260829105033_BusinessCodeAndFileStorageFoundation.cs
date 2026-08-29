@@ -11,6 +11,39 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // The existing Files table previously allowed unconstrained strings. Fail with
+            // an actionable error rather than silently truncating data or creating an
+            // invalid unique index during the storage foundation upgrade.
+            migrationBuilder.Sql("""
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [Files]
+                    WHERE LEN([StoredName]) > 255
+                       OR LEN([StorageKey]) > 500
+                       OR LEN([OriginalName]) > 255
+                       OR LEN([ContentType]) > 200
+                )
+                    THROW 51000, 'Existing file metadata exceeds the supported storage lengths.', 1;
+
+                IF EXISTS
+                (
+                    SELECT [StorageKey]
+                    FROM [Files]
+                    GROUP BY [StorageKey]
+                    HAVING COUNT(*) > 1
+                )
+                    THROW 51001, 'Existing file records contain duplicate StorageKey values.', 1;
+
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [Files]
+                    WHERE [StorageProvider] NOT IN ('Local', 'S3')
+                )
+                    THROW 51002, 'Existing file records contain an unsupported StorageProvider.', 1;
+                """);
+
             migrationBuilder.DropIndex(
                 name: "IX_Files_ClinicId",
                 table: "Files");
@@ -67,6 +100,19 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 maxLength: 20,
                 nullable: false,
                 defaultValue: "");
+
+            // Preserve useful metadata for any legacy rows without making the migration
+            // depend on a particular storage provider or physical path format.
+            migrationBuilder.Sql("""
+                UPDATE [Files]
+                SET [FileExtension] =
+                    CASE
+                        WHEN CHARINDEX('.', REVERSE([OriginalName])) BETWEEN 2 AND 20
+                            THEN LOWER(RIGHT([OriginalName], CHARINDEX('.', REVERSE([OriginalName]))))
+                        ELSE ''
+                    END
+                WHERE [FileExtension] = '';
+                """);
 
             migrationBuilder.AddColumn<string>(
                 name: "CityCode",
@@ -204,11 +250,78 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 table: "FileUploadSessions",
                 column: "UploadTokenHash",
                 unique: true);
+
+            // Existing clinics were provisioned before file permissions existed. Seed the
+            // global permission catalog entries and grant them to the protected system
+            // roles so upgrades behave the same as newly provisioned clinics.
+            migrationBuilder.Sql("""
+                DECLARE @Now datetime2 = SYSUTCDATETIME();
+                DECLARE @FilesViewId uniqueidentifier =
+                    (SELECT TOP (1) [Id] FROM [Permissions] WHERE [Code] = 'Files.View');
+                DECLARE @FilesUploadId uniqueidentifier =
+                    (SELECT TOP (1) [Id] FROM [Permissions] WHERE [Code] = 'Files.Upload');
+
+                IF @FilesViewId IS NULL
+                BEGIN
+                    SET @FilesViewId = NEWID();
+                    INSERT INTO [Permissions]
+                        ([Id], [Code], [Name], [Group], [Scope], [CreatedDate], [UpdatedDate], [CreateByUserId], [UpdatedByUserId])
+                    VALUES
+                        (@FilesViewId, 'Files.View', 'View and download files', 'Files', 'Clinic', @Now, NULL, NULL, NULL);
+                END
+                ELSE
+                BEGIN
+                    UPDATE [Permissions]
+                    SET [Name] = 'View and download files', [Group] = 'Files', [Scope] = 'Clinic'
+                    WHERE [Id] = @FilesViewId;
+                END
+
+                IF @FilesUploadId IS NULL
+                BEGIN
+                    SET @FilesUploadId = NEWID();
+                    INSERT INTO [Permissions]
+                        ([Id], [Code], [Name], [Group], [Scope], [CreatedDate], [UpdatedDate], [CreateByUserId], [UpdatedByUserId])
+                    VALUES
+                        (@FilesUploadId, 'Files.Upload', 'Upload files', 'Files', 'Clinic', @Now, NULL, NULL, NULL);
+                END
+                ELSE
+                BEGIN
+                    UPDATE [Permissions]
+                    SET [Name] = 'Upload files', [Group] = 'Files', [Scope] = 'Clinic'
+                    WHERE [Id] = @FilesUploadId;
+                END
+
+                INSERT INTO [RolePermissions]
+                    ([Id], [RoleId], [PermissionId], [CreatedDate], [UpdatedDate], [CreateByUserId], [UpdatedByUserId], [ClinicId])
+                SELECT NEWID(), r.[Id], p.[PermissionId], @Now, NULL, NULL, NULL, r.[ClinicId]
+                FROM [Roles] r
+                CROSS APPLY (VALUES (@FilesViewId), (@FilesUploadId)) p([PermissionId])
+                WHERE r.[IsSystem] = 1
+                  AND r.[Code] IN ('ADMIN', 'RECEPTIONIST', 'DOCTOR', 'NURSE')
+                  AND NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [RolePermissions] rp
+                      WHERE rp.[RoleId] = r.[Id]
+                        AND rp.[PermissionId] = p.[PermissionId]
+                        AND rp.[ClinicId] = r.[ClinicId]
+                  );
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                DELETE rp
+                FROM [RolePermissions] rp
+                INNER JOIN [Permissions] p ON p.[Id] = rp.[PermissionId]
+                WHERE p.[Code] IN ('Files.View', 'Files.Upload');
+
+                DELETE FROM [Permissions]
+                WHERE [Code] IN ('Files.View', 'Files.Upload');
+                """);
+
             migrationBuilder.DropTable(
                 name: "CodeCounters");
 
