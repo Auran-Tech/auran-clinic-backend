@@ -1,5 +1,6 @@
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Features;
+using Auran.Clinic.Application.ReferenceData;
 using Auran.Clinic.Domain.Enums;
 
 namespace Auran.Clinic.UnitTests;
@@ -45,5 +46,24 @@ public class FoundationTests
 
         Assert.NotEmpty(features);
         Assert.Equal(features.Count, features.Select(x => x.Code).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void ReferenceCatalog_HasUniqueStableCodes()
+    {
+        Assert.Equal(ReferenceDataCatalog.Fonts.Count, ReferenceDataCatalog.Fonts.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(ReferenceDataCatalog.Countries.Count, ReferenceDataCatalog.Countries.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(ReferenceDataCatalog.Locales.Count, ReferenceDataCatalog.Locales.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(
+            ReferenceDataCatalog.Cities.Count,
+            ReferenceDataCatalog.Cities.Select(x => $"{x.CountryCode}:{x.Code}").Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void ReferenceCatalog_ValidatesCountryCityAndTimeZone()
+    {
+        Assert.True(ReferenceDataCatalog.IsSupportedCity("EG", "CAI"));
+        Assert.False(ReferenceDataCatalog.IsSupportedCity("AE", "CAI"));
+        Assert.True(ReferenceDataCatalog.IsSupportedTimeZone("UTC"));
     }
 }

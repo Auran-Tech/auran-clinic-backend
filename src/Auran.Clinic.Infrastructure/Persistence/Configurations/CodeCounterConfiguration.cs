@@ -26,5 +26,9 @@ public sealed class CodeCounterConfiguration : IEntityTypeConfiguration<CodeCoun
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.ToTable(table => table.HasCheckConstraint(
+            "CK_CodeCounters_ScopeClinic",
+            "([Scope] = 'Platform' AND [ClinicId] IS NULL) OR ([Scope] = 'Clinic' AND [ClinicId] IS NOT NULL)"));
     }
 }

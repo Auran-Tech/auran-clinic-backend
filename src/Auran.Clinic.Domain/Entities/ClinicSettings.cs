@@ -8,6 +8,8 @@ public class ClinicSettings : BaseEntity
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public string? CountryCode { get; set; }
+    public string? CityCode { get; set; }
     public string? Website { get; set; }
     public string? Locale { get; set; }
     public string? DateFormat { get; set; }

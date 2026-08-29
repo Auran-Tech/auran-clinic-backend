@@ -2,8 +2,10 @@ using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Clinics;
+using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Features;
 using Auran.Clinic.Application.Models;
+using Auran.Clinic.Application.ReferenceData;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Features;
@@ -20,7 +22,8 @@ public sealed class PlatformClinicService(
     ICurrentActor currentActor,
     IAuditService auditService,
     IClinicAccessService clinicAccessService,
-    SystemCatalogService catalogService) : IPlatformClinicService
+    SystemCatalogService catalogService,
+    ICodeGeneratorService codeGeneratorService) : IPlatformClinicService
 {
     public async Task<ClinicProvisioningResult> CreateAsync(
         CreateClinicRequest request,
@@ -29,10 +32,7 @@ public sealed class PlatformClinicService(
         if (!IsPlatformActor())
             return new ClinicProvisioningResult { Error = "A Platform user is required to provision a clinic." };
 
-        var clinicCode = request.Code.Trim().ToUpperInvariant();
         var adminEmail = request.Admin.Email.Trim().ToLowerInvariant();
-        if (await dbContext.Clinics.AnyAsync(x => x.Code == clinicCode, cancellationToken))
-            return new ClinicProvisioningResult { Error = "Clinic code already exists.", IsConflict = true };
         if (await userManager.FindByEmailAsync(adminEmail) is not null)
             return new ClinicProvisioningResult { Error = "Admin email is already in use.", IsConflict = true };
 
@@ -41,6 +41,7 @@ public sealed class PlatformClinicService(
         {
             var permissions = await catalogService.EnsurePermissionsAsync(cancellationToken);
             var features = await catalogService.EnsureFeaturesAsync(cancellationToken);
+            var clinicCode = await GenerateUniqueClinicCodeAsync(request.CodePrefix, cancellationToken);
 
             var clinic = new Domain.Entities.Clinic
             {
@@ -54,7 +55,7 @@ public sealed class PlatformClinicService(
                 FontFamily = Clean(request.FontFamily),
                 WelcomeTitle = Clean(request.WelcomeTitle),
                 WelcomeMessage = Clean(request.WelcomeMessage),
-                TimeZoneId = Clean(request.TimeZoneId) ?? "UTC",
+                TimeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId) ?? "UTC",
                 PatientNumberPrefix = request.PatientNumberPrefix.Trim().ToUpperInvariant()
             };
             dbContext.Clinics.Add(clinic);
@@ -66,6 +67,8 @@ public sealed class PlatformClinicService(
                 Phone = Clean(request.Phone),
                 Email = Clean(request.Email),
                 Address = Clean(request.Address),
+                CountryCode = Clean(request.CountryCode)?.ToUpperInvariant(),
+                CityCode = Clean(request.CityCode)?.ToUpperInvariant(),
                 Website = Clean(request.Website),
                 Locale = Clean(request.Locale) ?? "en",
                 DateFormat = "yyyy-MM-dd",
@@ -160,8 +163,8 @@ public sealed class PlatformClinicService(
                 Category = "Clinic",
                 EntityType = nameof(Domain.Entities.Clinic),
                 EntityId = clinic.Id.ToString(),
-                Description = "Clinic provisioning completed with settings, features, protected roles, role permissions and the initial Admin.",
-                Metadata = new { clinic.Code, AdminUserId = admin.Id, Roles = roles.Select(x => x.Code).ToArray() }
+                Description = "Clinic provisioning completed with a system-generated clinic code, settings, features, protected roles, role permissions and the initial Admin.",
+                Metadata = new { clinic.Code, request.CodePrefix, AdminUserId = admin.Id, Roles = roles.Select(x => x.Code).ToArray() }
             }, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
@@ -245,20 +248,26 @@ public sealed class PlatformClinicService(
         var clinic = await dbContext.Clinics.SingleOrDefaultAsync(x => x.Id == clinicId, cancellationToken);
         if (clinic is null)
             return false;
-        var code = request.Code.Trim().ToUpperInvariant();
-        if (await dbContext.Clinics.AnyAsync(x => x.Id != clinicId && x.Code == code, cancellationToken))
-            throw new InvalidOperationException("Clinic code already exists.");
+
+        var settings = await dbContext.ClinicSettings.SingleOrDefaultAsync(x => x.ClinicId == clinicId, cancellationToken);
+        if (settings is null)
+        {
+            settings = new ClinicSettings { Id = Guid.NewGuid(), ClinicId = clinic.Id };
+            dbContext.ClinicSettings.Add(settings);
+        }
 
         clinic.Name = request.Name.Trim();
-        clinic.Code = code;
         clinic.LogoUrl = Clean(request.LogoUrl);
         clinic.PrimaryColor = Clean(request.PrimaryColor);
         clinic.SecondaryColor = Clean(request.SecondaryColor);
         clinic.FontFamily = Clean(request.FontFamily);
         clinic.WelcomeTitle = Clean(request.WelcomeTitle);
         clinic.WelcomeMessage = Clean(request.WelcomeMessage);
-        clinic.TimeZoneId = Clean(request.TimeZoneId) ?? "UTC";
+        clinic.TimeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId) ?? "UTC";
         clinic.PatientNumberPrefix = request.PatientNumberPrefix.Trim().ToUpperInvariant();
+        settings.CountryCode = Clean(request.CountryCode)?.ToUpperInvariant();
+        settings.CityCode = Clean(request.CityCode)?.ToUpperInvariant();
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -342,6 +351,24 @@ public sealed class PlatformClinicService(
             Metadata = request.Features.Select(x => new { x.Code, x.IsEnabled }).ToArray()
         }, cancellationToken);
         return await MapFeaturesAsync(clinicId, cancellationToken);
+    }
+
+    private async Task<string> GenerateUniqueClinicCodeAsync(string prefix, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var code = await codeGeneratorService.GenerateAsync(
+                CodeScope.Platform,
+                clinicId: null,
+                CodeType.Clinic,
+                prefix,
+                cancellationToken);
+
+            if (!await dbContext.Clinics.AsNoTracking().AnyAsync(x => x.Code == code, cancellationToken))
+                return code;
+        }
+
+        throw new InvalidOperationException("Unable to reserve a unique clinic code after multiple attempts.");
     }
 
     private bool IsPlatformActor() => currentActor.IsAuthenticated && currentActor.ActorType == ActorType.Platform;

@@ -61,6 +61,22 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal("AuditLogs_Search", GetOperationId(paths, "/api/audit-logs", "get"));
     }
 
+    [Fact]
+    public async Task SwaggerDocument_ExposesAnonymousReferenceCatalogOperations()
+    {
+        using var client = factory.CreateClient();
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
+
+        Assert.Equal("Reference_Fonts", GetOperationId(paths, "/api/reference/fonts", "get"));
+        Assert.Equal("Reference_Countries", GetOperationId(paths, "/api/reference/countries", "get"));
+        Assert.Equal("Reference_Cities", GetOperationId(paths, "/api/reference/countries/{countryCode}/cities", "get"));
+        Assert.Equal("Reference_Locales", GetOperationId(paths, "/api/reference/locales", "get"));
+        Assert.Equal("Reference_DateFormats", GetOperationId(paths, "/api/reference/date-formats", "get"));
+        Assert.Equal("Reference_TimeFormats", GetOperationId(paths, "/api/reference/time-formats", "get"));
+        Assert.Equal("Reference_TimeZones", GetOperationId(paths, "/api/reference/time-zones", "get"));
+        AssertAnonymous(GetOperation(paths, "/api/reference/fonts", "get"));
+    }
+
     private static async Task<JsonElement> GetDocumentAsync(HttpClient client)
     {
         var response = await client.GetAsync("/swagger/v1/swagger.json");

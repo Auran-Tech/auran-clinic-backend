@@ -12,6 +12,8 @@ public sealed class ClinicSettingsResponse
     public string? WelcomeMessage { get; set; }
     public string? WelcomeButtonText { get; set; }
     public string? TimeZoneId { get; set; }
+    public string? CountryCode { get; set; }
+    public string? CityCode { get; set; }
     public string? PatientNumberPrefix { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }

@@ -1,6 +1,7 @@
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Features;
+using Auran.Clinic.Application.ReferenceData;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Features;
@@ -28,8 +29,6 @@ public sealed class ClinicService(
         var settings = await dbContext.ClinicSettings.AsNoTracking()
             .SingleOrDefaultAsync(x => x.ClinicId == clinic.Id, cancellationToken);
 
-        // Initial Admin contact details are platform-management data and are not
-        // exposed through the general clinic context endpoint.
         return MapDetails(clinic, settings, admin: null);
     }
 
@@ -76,12 +75,14 @@ public sealed class ClinicService(
         clinic.FontFamily = Clean(request.FontFamily);
         clinic.WelcomeTitle = Clean(request.WelcomeTitle);
         clinic.WelcomeMessage = Clean(request.WelcomeMessage);
-        clinic.TimeZoneId = Clean(request.TimeZoneId) ?? "UTC";
+        clinic.TimeZoneId = ReferenceDataCatalog.NormalizeTimeZoneId(request.TimeZoneId) ?? "UTC";
         clinic.PatientNumberPrefix = Clean(request.PatientNumberPrefix)?.ToUpperInvariant() ?? clinic.PatientNumberPrefix;
 
         settings.Phone = Clean(request.Phone);
         settings.Email = Clean(request.Email);
         settings.Address = Clean(request.Address);
+        settings.CountryCode = Clean(request.CountryCode)?.ToUpperInvariant();
+        settings.CityCode = Clean(request.CityCode)?.ToUpperInvariant();
         settings.Website = Clean(request.Website);
         settings.Locale = Clean(request.Locale) ?? "en";
         settings.DateFormat = Clean(request.DateFormat) ?? "yyyy-MM-dd";
@@ -174,6 +175,8 @@ public sealed class ClinicService(
         WelcomeMessage = clinic.WelcomeMessage,
         WelcomeButtonText = settings?.WelcomeButtonText,
         TimeZoneId = clinic.TimeZoneId,
+        CountryCode = settings?.CountryCode,
+        CityCode = settings?.CityCode,
         PatientNumberPrefix = clinic.PatientNumberPrefix,
         Phone = settings?.Phone,
         Email = settings?.Email,
