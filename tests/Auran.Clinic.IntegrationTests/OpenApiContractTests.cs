@@ -26,10 +26,10 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         var paths = document.GetProperty("paths");
 
         Assert.True(document.GetProperty("security").GetArrayLength() > 0);
-        Assert.Equal(0, GetOperation(paths, "/api/auth/login", "post").GetProperty("security").GetArrayLength());
-        Assert.Equal(0, GetOperation(paths, "/api/auth/refresh", "post").GetProperty("security").GetArrayLength());
-        Assert.Equal(0, GetOperation(paths, "/api/platform/auth/login", "post").GetProperty("security").GetArrayLength());
-        Assert.Equal(0, GetOperation(paths, "/api/platform/auth/refresh", "post").GetProperty("security").GetArrayLength());
+        AssertAnonymous(GetOperation(paths, "/api/auth/login", "post"));
+        AssertAnonymous(GetOperation(paths, "/api/auth/refresh", "post"));
+        AssertAnonymous(GetOperation(paths, "/api/platform/auth/login", "post"));
+        AssertAnonymous(GetOperation(paths, "/api/platform/auth/refresh", "post"));
     }
 
     [Fact]
@@ -68,6 +68,13 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
+    }
+
+    private static void AssertAnonymous(JsonElement operation)
+    {
+        var security = operation.GetProperty("security");
+        Assert.True(security.GetArrayLength() > 0);
+        Assert.Equal(0, security[0].EnumerateObject().Count());
     }
 
     private static JsonElement GetOperation(JsonElement paths, string path, string method) =>
