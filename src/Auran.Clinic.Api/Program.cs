@@ -30,7 +30,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "JWT access token returned by the matching platform or clinic authentication endpoint. Platform and clinic JWTs are not interchangeable."
+        Description = "Paste the JWT access token only (the value beginning with eyJ...). Do not type the 'Bearer ' prefix; Swagger adds it automatically. Platform and clinic JWTs are not interchangeable."
     });
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
