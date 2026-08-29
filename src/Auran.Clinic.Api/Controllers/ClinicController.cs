@@ -1,8 +1,9 @@
+using Auran.Clinic.Api.Contracts.Clinics;
+using Auran.Clinic.Api.Mappings;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Features;
 using Auran.Clinic.Application.Models;
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -13,9 +14,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Route("api/clinic")]
 [Produces("application/json")]
 [Authorize(Policy = ActorPolicies.Clinic)]
-public sealed class ClinicController(
-    IClinicService clinicService,
-    IValidator<UpdateClinicSettingsRequest> settingsValidator) : ControllerBase
+public sealed class ClinicController(IClinicService clinicService) : ControllerBase
 {
     [HttpGet]
     [SwaggerOperation(Summary = "Get current clinic", Description = "Returns the authenticated clinic's own tenant identity and configuration. The clinic is resolved from the JWT and cannot be selected using a route or query parameter.", OperationId = "Clinic_GetCurrent", Tags = new[] { "Clinic" })]
@@ -41,12 +40,12 @@ public sealed class ClinicController(
     [HttpPut("settings")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Settings.Manage)]
     [SwaggerOperation(Summary = "Update current clinic settings", Description = "Updates configurable settings for the authenticated clinic only. ClinicId is never accepted from the request and all mutations are centrally audited.", OperationId = "ClinicSettings_Update", Tags = new[] { "Clinic" })]
-    public async Task<ActionResult<BaseResponse<ClinicSettingsResponse>>> UpdateSettings([FromBody] UpdateClinicSettingsRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BaseResponse<ClinicSettingsResponse>>> UpdateSettings(
+        [FromBody] UpdateClinicSettingsApiRequest request,
+        CancellationToken cancellationToken)
     {
-        var validation = await settingsValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return BadRequest(new BaseResponse { Status = false, Message = "Validation failed.", Error = string.Join(" ", validation.Errors.Select(x => x.ErrorMessage)) });
-        var result = await clinicService.UpdateSettingsAsync(request, cancellationToken);
+        var result = await clinicService.UpdateSettingsAsync(request.ToServiceRequest(), cancellationToken);
         return result is null
             ? NotFound(new BaseResponse { Status = false, Message = "Clinic settings were not found." })
             : Ok(new BaseResponse<ClinicSettingsResponse> { Status = true, Message = "Clinic settings updated successfully.", Data = result });
