@@ -156,7 +156,7 @@ public sealed class AuthService(
             if (identityUser is not null)
             {
                 await WriteAuthAuditAsync(user, identityUser, "Authentication.Logout",
-                    "Clinic refresh token was revoked during logout.", cancellationToken);
+                    "Clinic authentication session was revoked during logout.", cancellationToken);
             }
         }
     }
@@ -191,13 +191,14 @@ public sealed class AuthService(
                 .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
+        var sessionId = Guid.NewGuid();
         var expiresDate = now.AddMinutes(_jwt.AccessTokenMinutes);
-        var accessToken = CreateAccessToken(user, identityUser, roles, permissions, expiresDate);
+        var accessToken = CreateAccessToken(user, identityUser, roles, permissions, sessionId, expiresDate);
         var rawRefreshToken = CreateRefreshToken();
 
         dbContext.RefreshTokens.Add(new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = sessionId,
             ClinicId = user.ClinicId,
             UserId = user.Id,
             TokenHash = HashToken(rawRefreshToken),
@@ -231,6 +232,7 @@ public sealed class AuthService(
         ApplicationIdentityUser identityUser,
         IEnumerable<string> roles,
         IEnumerable<string> permissions,
+        Guid sessionId,
         DateTime expiresDate)
     {
         var claims = new List<Claim>
@@ -241,6 +243,7 @@ public sealed class AuthService(
             new("clinic_user_id", user.Id.ToString()),
             new("clinic_id", user.ClinicId.ToString()),
             new("clinic_super_user", user.IsClinicSuperUser.ToString().ToLowerInvariant()),
+            new("session_id", sessionId.ToString()),
             new("display_name", user.FullName),
             new(ClaimTypes.Email, identityUser.Email ?? user.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
