@@ -72,6 +72,20 @@ public static class DependencyInjection
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var normalizedToken = BearerTokenNormalizer.NormalizeAuthorizationHeader(
+                            context.Request.Headers.Authorization.ToString());
+
+                        if (!string.IsNullOrWhiteSpace(normalizedToken))
+                            context.Token = normalizedToken;
+
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
         services.AddAuthorization();
