@@ -28,6 +28,7 @@ builder.Services.AddSwaggerGen(options =>
 
     options.EnableAnnotations();
     options.OperationFilter<AllowAnonymousOperationFilter>();
+    options.OperationFilter<AuthorizationResponsesOperationFilter>();
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
