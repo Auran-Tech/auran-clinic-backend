@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations;
+using Auran.Clinic.Api.Contracts.Files;
+using Auran.Clinic.Api.Mappings;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Files;
 using Auran.Clinic.Application.Models;
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -11,9 +13,7 @@ namespace Auran.Clinic.Api.Controllers;
 [ApiController]
 [Route("api/files")]
 [Authorize(Policy = ActorPolicies.Clinic)]
-public sealed class FilesController(
-    IFileService fileService,
-    IValidator<CreateFileUploadSessionRequest> createValidator) : ControllerBase
+public sealed class FilesController(IFileService fileService) : ControllerBase
 {
     [HttpPost("upload-sessions")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Files.Upload)]
@@ -25,23 +25,12 @@ public sealed class FilesController(
     [ProducesResponseType(typeof(BaseResponse<FileUploadSessionResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BaseResponse<FileUploadSessionResponse>>> CreateUploadSession(
-        [FromBody] CreateFileUploadSessionRequest request,
+        [FromBody] CreateFileUploadSessionApiRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = await createValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-        {
-            return BadRequest(new BaseResponse
-            {
-                Status = false,
-                Message = "Validation failed.",
-                Error = string.Join(" ", validation.Errors.Select(x => x.ErrorMessage))
-            });
-        }
-
         try
         {
-            var result = await fileService.CreateUploadSessionAsync(request, cancellationToken);
+            var result = await fileService.CreateUploadSessionAsync(request.ToServiceRequest(), cancellationToken);
             if (result is null)
                 return Forbid();
 
@@ -70,12 +59,12 @@ public sealed class FilesController(
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> UploadContent(
         Guid id,
-        [FromQuery] string token,
+        [FromQuery, Required] string? token,
         CancellationToken cancellationToken)
     {
         var result = await fileService.UploadContentAsync(
             id,
-            token,
+            token!,
             Request.Body,
             Request.ContentLength,
             Request.ContentType,
