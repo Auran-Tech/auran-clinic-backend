@@ -93,6 +93,35 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         AssertAnonymous(GetOperation(paths, "/api/files/upload-sessions/{id}/content", "put"));
     }
 
+    [Fact]
+    public async Task ProtectedOperations_DocumentStructuredAuthorizationFailures()
+    {
+        using var client = factory.CreateClient();
+        var paths = (await GetDocumentAsync(client)).GetProperty("paths");
+        var operation = GetOperation(paths, "/api/platform/clinics", "post");
+        var responses = operation.GetProperty("responses");
+
+        Assert.True(responses.TryGetProperty("401", out var unauthorized));
+        Assert.True(responses.TryGetProperty("403", out var forbidden));
+        Assert.True(unauthorized.GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(forbidden.GetProperty("content").TryGetProperty("application/json", out _));
+    }
+
+    [Fact]
+    public async Task ProtectedEndpoint_ReturnsStructuredUnauthorizedResponse()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/api/platform/clinics");
+
+        Assert.Equal(401, (int)response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(json.GetProperty("status").GetBoolean());
+        Assert.Equal("Unauthorized.", json.GetProperty("message").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(json.GetProperty("error").GetString()));
+    }
+
     private static async Task<JsonElement> GetDocumentAsync(HttpClient client)
     {
         var response = await client.GetAsync("/swagger/v1/swagger.json");
