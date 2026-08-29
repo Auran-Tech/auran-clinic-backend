@@ -1,3 +1,5 @@
+using Auran.Clinic.Api.Contracts.Authentication;
+using Auran.Clinic.Api.Mappings;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
@@ -20,12 +22,13 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         OperationId = "Auth_Login",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Login(
-        [FromBody] LoginRequest request,
+        [FromBody] LoginApiRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await authService.LoginAsync(request, cancellationToken);
+        var result = await authService.LoginAsync(request.ToServiceRequest(), cancellationToken);
         if (result is null)
             return Unauthorized(new BaseResponse { Status = false, Message = "Invalid email or password." });
         return Ok(new BaseResponse<AuthResponse> { Status = true, Data = result });
@@ -39,12 +42,13 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         OperationId = "Auth_RefreshToken",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Refresh(
-        [FromBody] RefreshTokenRequest request,
+        [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await authService.RefreshAsync(request, cancellationToken);
+        var result = await authService.RefreshAsync(request.ToServiceRequest(), cancellationToken);
         if (result is null)
             return Unauthorized(new BaseResponse { Status = false, Message = "Invalid or expired refresh token." });
         return Ok(new BaseResponse<AuthResponse> { Status = true, Data = result });
@@ -58,13 +62,15 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         OperationId = "Auth_Logout",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<BaseResponse>> Logout(
-        [FromBody] RefreshTokenRequest request,
+        [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
     {
-        await authService.RevokeAsync(request.RefreshToken, cancellationToken);
+        var serviceRequest = request.ToServiceRequest();
+        await authService.RevokeAsync(serviceRequest.RefreshToken, cancellationToken);
         return Ok(new BaseResponse { Status = true, Message = "Logged out successfully." });
     }
 }
