@@ -1,3 +1,5 @@
+using Auran.Clinic.Api.Contracts.Authentication;
+using Auran.Clinic.Api.Mappings;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
@@ -20,12 +22,13 @@ public sealed class PlatformAuthController(IPlatformAuthService authService) : C
         OperationId = "PlatformAuth_Login",
         Tags = new[] { "Platform Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<PlatformAuthResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<BaseResponse<PlatformAuthResponse>>> Login(
-        [FromBody] LoginRequest request,
+        [FromBody] LoginApiRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await authService.LoginAsync(request, cancellationToken);
+        var result = await authService.LoginAsync(request.ToServiceRequest(), cancellationToken);
         if (result is null)
             return Unauthorized(new BaseResponse { Status = false, Message = "Invalid platform credentials." });
         return Ok(new BaseResponse<PlatformAuthResponse> { Status = true, Data = result });
@@ -39,12 +42,13 @@ public sealed class PlatformAuthController(IPlatformAuthService authService) : C
         OperationId = "PlatformAuth_RefreshToken",
         Tags = new[] { "Platform Authentication" })]
     [ProducesResponseType(typeof(BaseResponse<PlatformAuthResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<BaseResponse<PlatformAuthResponse>>> Refresh(
-        [FromBody] RefreshTokenRequest request,
+        [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await authService.RefreshAsync(request, cancellationToken);
+        var result = await authService.RefreshAsync(request.ToServiceRequest(), cancellationToken);
         if (result is null)
             return Unauthorized(new BaseResponse { Status = false, Message = "Invalid or expired platform refresh token." });
         return Ok(new BaseResponse<PlatformAuthResponse> { Status = true, Data = result });
@@ -58,13 +62,15 @@ public sealed class PlatformAuthController(IPlatformAuthService authService) : C
         OperationId = "PlatformAuth_Logout",
         Tags = new[] { "Platform Authentication" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<BaseResponse>> Logout(
-        [FromBody] RefreshTokenRequest request,
+        [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
     {
-        await authService.RevokeAsync(request.RefreshToken, cancellationToken);
+        var serviceRequest = request.ToServiceRequest();
+        await authService.RevokeAsync(serviceRequest.RefreshToken, cancellationToken);
         return Ok(new BaseResponse { Status = true, Message = "Logged out successfully." });
     }
 }
