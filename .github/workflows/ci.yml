@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-test:
@@ -16,9 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -27,37 +24,6 @@ jobs:
 
       - name: Restore
         run: dotnet restore Auran.Clinic.sln
-
-      - name: Install dotnet-ef
-        if: github.event_name == 'pull_request'
-        run: dotnet tool install --global dotnet-ef --version 10.0.11
-
-      - name: Generate business code and file storage migration when missing
-        if: github.event_name == 'pull_request'
-        id: migration
-        env:
-          ASPNETCORE_ENVIRONMENT: Development
-        run: |
-          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -maxdepth 1 -name '*_BusinessCodeAndFileStorageFoundation.cs' | grep -q .; then
-            echo "generated=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          dotnet ef migrations add BusinessCodeAndFileStorageFoundation \
-            --project src/Auran.Clinic.Infrastructure \
-            --startup-project src/Auran.Clinic.Api \
-            --context AuranClinicDbContext \
-            --output-dir Persistence/Migrations
-          echo "generated=true" >> "$GITHUB_OUTPUT"
-
-      - name: Commit generated migration to PR branch
-        if: steps.migration.outputs.generated == 'true' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-          git commit -m "chore: add business code and file storage migration"
-          git push origin HEAD:${{ github.head_ref }}
 
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
