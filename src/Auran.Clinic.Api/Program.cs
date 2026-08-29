@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Auran.Clinic.Api.OpenApi;
+using Auran.Clinic.Api.Validation;
 using Auran.Clinic.Application;
 using Auran.Clinic.Infrastructure;
 using Auran.Clinic.Infrastructure.Platform;
@@ -15,6 +16,7 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddApiValidation();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
