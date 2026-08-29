@@ -19,6 +19,13 @@ public sealed class AllowAnonymousOperationFilter : IOperationFilter
             .Any() == true;
 
         if (actionAllowsAnonymous || controllerAllowsAnonymous)
-            operation.Security = new List<OpenApiSecurityRequirement>();
+        {
+            // An empty requirement object is the OpenAPI representation of an
+            // anonymous alternative when a document-level Bearer requirement exists.
+            operation.Security = new List<OpenApiSecurityRequirement>
+            {
+                new()
+            };
+        }
     }
 }
