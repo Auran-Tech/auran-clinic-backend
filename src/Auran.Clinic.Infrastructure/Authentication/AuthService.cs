@@ -64,11 +64,16 @@ public sealed class AuthService(
         RefreshTokenRequest request,
         CancellationToken cancellationToken = default)
     {
-        var tokenHash = HashToken(request.RefreshToken);
-        var refreshToken = await dbContext.RefreshTokens
-            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            return null;
 
-        if (refreshToken is null || !refreshToken.IsActive)
+        var rawRefreshToken = request.RefreshToken.Trim();
+        var tokenHash = HashToken(rawRefreshToken);
+        var now = DateTime.UtcNow;
+
+        var refreshToken = await dbContext.RefreshTokens.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (refreshToken is null || refreshToken.RevokedDate is not null || refreshToken.ExpiresDate <= now)
             return null;
 
         var clinicIsActive = await dbContext.Clinics.AsNoTracking()
@@ -78,7 +83,7 @@ public sealed class AuthService(
         if (!clinicIsActive)
             return null;
 
-        var user = await dbContext.Users.SingleOrDefaultAsync(
+        var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
             x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
             cancellationToken);
         if (user is null)
@@ -88,20 +93,51 @@ public sealed class AuthService(
         if (identityUser is null || identityUser.AccountType != AccountType.Clinic)
             return null;
 
-        refreshToken.RevokedDate = DateTime.UtcNow;
-        var response = await CreateSessionAsync(user, identityUser, cancellationToken, saveChanges: false);
-        refreshToken.ReplacedByTokenHash = HashToken(response.RefreshToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var revokedRows = await dbContext.RefreshTokens
+                .Where(x => x.Id == refreshToken.Id && x.RevokedDate == null && x.ExpiresDate > now)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.RevokedDate, now),
+                    cancellationToken);
 
-        await WriteAuthAuditAsync(user, identityUser, "Authentication.TokenRefreshed",
-            "Clinic access and refresh tokens were rotated successfully.", cancellationToken);
+            if (revokedRows != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
 
-        return response;
+            var response = await CreateSessionAsync(user, identityUser, cancellationToken, saveChanges: false);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var replacementHash = HashToken(response.RefreshToken);
+            await dbContext.RefreshTokens
+                .Where(x => x.Id == refreshToken.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.ReplacedByTokenHash, replacementHash),
+                    cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+
+            await WriteAuthAuditAsync(user, identityUser, "Authentication.TokenRefreshed",
+                "Clinic access and refresh tokens were rotated successfully.", cancellationToken);
+
+            return response;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        var tokenHash = HashToken(refreshToken);
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            return;
+
+        var tokenHash = HashToken(refreshToken.Trim());
         var entity = await dbContext.RefreshTokens
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
@@ -154,16 +190,19 @@ public sealed class AuthService(
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
-        var expiresDate = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
+        var now = DateTime.UtcNow;
+        var expiresDate = now.AddMinutes(_jwt.AccessTokenMinutes);
         var accessToken = CreateAccessToken(user, identityUser, roles, permissions, expiresDate);
-        var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var rawRefreshToken = CreateRefreshToken();
 
         dbContext.RefreshTokens.Add(new RefreshToken
         {
+            Id = Guid.NewGuid(),
             ClinicId = user.ClinicId,
             UserId = user.Id,
             TokenHash = HashToken(rawRefreshToken),
-            ExpiresDate = DateTime.UtcNow.AddDays(_jwt.RefreshTokenDays)
+            ExpiresDate = now.AddDays(_jwt.RefreshTokenDays),
+            CreatedDate = now
         });
 
         if (saveChanges)
@@ -244,6 +283,12 @@ public sealed class AuthService(
             Description = description
         }, cancellationToken);
 
+    private static string CreateRefreshToken() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
     private static string HashToken(string token) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token.Trim())));
 }
