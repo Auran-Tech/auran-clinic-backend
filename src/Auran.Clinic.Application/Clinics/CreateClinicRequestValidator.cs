@@ -7,7 +7,7 @@ public sealed class CreateClinicRequestValidator : AbstractValidator<CreateClini
     public CreateClinicRequestValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(50).Matches("^[A-Za-z0-9_-]+$");
+        RuleFor(x => x.CodePrefix).NotEmpty().MaximumLength(20).Matches("^[A-Za-z0-9_-]+$");
         RuleFor(x => x.PatientNumberPrefix).NotEmpty().MaximumLength(20).Matches("^[A-Za-z0-9_-]+$");
         RuleFor(x => x.LogoUrl).MaximumLength(500);
         RuleFor(x => x.PrimaryColor).Matches("^#[0-9A-Fa-f]{6}$").When(x => !string.IsNullOrWhiteSpace(x.PrimaryColor));
