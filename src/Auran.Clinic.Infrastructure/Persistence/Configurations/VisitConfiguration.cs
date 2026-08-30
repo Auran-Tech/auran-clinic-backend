@@ -10,5 +10,6 @@ public class VisitConfiguration : IEntityTypeConfiguration<Visit>
     {
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
         builder.Property(x => x.DocumentationStatus).HasConversion<string>().HasMaxLength(32);
+        builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
