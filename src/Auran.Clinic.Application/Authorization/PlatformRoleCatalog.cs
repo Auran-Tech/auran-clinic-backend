@@ -9,6 +9,6 @@ public static class PlatformRoleCatalog
         new SystemRoleDefinition(
             PlatformAdmin,
             "Platform Admin",
-            SystemPermissionCatalog.Platform.Select(x => x.Code).ToArray())
+            SystemPermissionCatalog.Platform.Select(x => x.Key).ToArray())
     };
 }
