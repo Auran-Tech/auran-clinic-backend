@@ -28,23 +28,23 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationIdentityUser>>();
 
-        var clinicA = new Auran.Clinic.Domain.Entities.Clinic
-        {
-            Id = ClinicAId,
-            Name = "Clinic A",
-            Code = "CLINIC_A",
-            IsActive = true,
-            PatientNumberPrefix = "AU"
-        };
-        var clinicB = new Auran.Clinic.Domain.Entities.Clinic
-        {
-            Id = ClinicBId,
-            Name = "Clinic B",
-            Code = "CLINIC_B",
-            IsActive = true,
-            PatientNumberPrefix = "BU"
-        };
-        dbContext.Clinics.AddRange(clinicA, clinicB);
+        dbContext.Clinics.AddRange(
+            new Auran.Clinic.Domain.Entities.Clinic
+            {
+                Id = ClinicAId,
+                Name = "Clinic A",
+                Code = "CLINIC_A",
+                IsActive = true,
+                PatientNumberPrefix = "AU"
+            },
+            new Auran.Clinic.Domain.Entities.Clinic
+            {
+                Id = ClinicBId,
+                Name = "Clinic B",
+                Code = "CLINIC_B",
+                IsActive = true,
+                PatientNumberPrefix = "BU"
+            });
         await dbContext.SaveChangesAsync();
 
         var superIdentity = new ApplicationIdentityUser
@@ -106,7 +106,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await dbContext.SaveChangesAsync();
     }
 
-    public new Task DisposeAsync()
+    Task IAsyncLifetime.DisposeAsync()
     {
         Dispose();
         return Task.CompletedTask;
