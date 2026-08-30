@@ -269,8 +269,8 @@ public static class DomainRelationshipConfiguration
 
     private static void ConfigureFileRelationships(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<FileRecord>()
-            .HasOne<User>().WithMany().HasForeignKey(x => x.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
+        // File uploader IDs are actor snapshots and intentionally are not physical FKs because
+        // files can be uploaded by either Clinic users or Platform users.
         modelBuilder.Entity<PatientAttachment>()
             .HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<PatientAttachment>()
