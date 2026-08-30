@@ -9,5 +9,4 @@ public class PatientProfileValue : ClinicEntity
     public bool? BooleanValue { get; set; }
     public DateOnly? DateValue { get; set; }
     public Guid? FileId { get; set; }
-    public string? JsonValue { get; set; }
 }
