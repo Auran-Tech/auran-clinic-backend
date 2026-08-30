@@ -5,6 +5,7 @@ using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace Auran.Clinic.Api.Controllers;
@@ -15,6 +16,7 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     [HttpPost("login")]
     [SwaggerOperation(Summary = "Authenticate a clinic user", OperationId = "Auth_Login", Tags = new[] { "Authentication" })]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Login(
