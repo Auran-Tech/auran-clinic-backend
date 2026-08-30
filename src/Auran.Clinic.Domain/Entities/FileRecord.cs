@@ -12,5 +12,6 @@ public class FileRecord : ClinicEntity
     public FileStorageProvider StorageProvider { get; set; }
     public required string StorageKey { get; set; }
     public DateTime UploadedAtUtc { get; set; }
-    public Guid UploadedByUserId { get; set; }
+    public ActorType UploadedByActorType { get; set; }
+    public Guid UploadedByActorId { get; set; }
 }
