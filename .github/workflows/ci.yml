@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-test:
@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -26,37 +24,6 @@ jobs:
 
       - name: Restore
         run: dotnet restore Auran.Clinic.sln
-
-      - name: Install dotnet-ef
-        run: dotnet tool install --global dotnet-ef --version 10.0.11
-
-      - name: Generate generated-code and file foundation migration when missing
-        shell: bash
-        run: |
-          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -maxdepth 1 -name '*GeneratedCodeAndFileFoundation.cs' | grep -q .; then
-            echo "Migration already exists."
-            exit 0
-          fi
-
-          ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add GeneratedCodeAndFileFoundation \
-            --project src/Auran.Clinic.Infrastructure \
-            --startup-project src/Auran.Clinic.Api \
-            --context AuranClinicDbContext \
-            --output-dir Persistence/Migrations
-
-      - name: Commit generated migration to PR branch
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            echo "No generated migration changes to commit."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-          git commit -m "chore: add generated code and file foundation migration"
-          git push origin HEAD:${{ github.head_ref }}
 
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
