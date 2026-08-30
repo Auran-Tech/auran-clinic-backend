@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Authentication;
@@ -28,17 +29,12 @@ public sealed class AccessSessionValidatorTests
         dbContext.PlatformRefreshTokens.Add(session);
         await dbContext.SaveChangesAsync();
 
-        var principal = CreatePrincipal(
-            ActorType.Platform,
-            sessionId,
-            ("platform_user_id", platformUserId.ToString()));
+        var principal = CreatePrincipal(ActorType.Platform, sessionId, ("platform_user_id", platformUserId.ToString()));
         var validator = new AccessSessionValidator(dbContext);
-
         Assert.True(await validator.IsActiveAsync(principal));
 
         session.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
-
         Assert.False(await validator.IsActiveAsync(principal));
     }
 
@@ -50,6 +46,21 @@ public sealed class AccessSessionValidatorTests
         var clinicUserId = Guid.NewGuid();
         var clinicId = Guid.NewGuid();
 
+        dbContext.Clinics.Add(new Auran.Clinic.Domain.Entities.Clinic
+        {
+            Id = clinicId,
+            Name = "Clinic",
+            Code = "CLINIC-1",
+            IsActive = true
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = clinicUserId,
+            ClinicId = clinicId,
+            IdentityUserId = Guid.NewGuid().ToString(),
+            FullName = "Clinic User",
+            IsActive = true
+        });
         var session = new RefreshToken
         {
             Id = sessionId,
@@ -59,7 +70,6 @@ public sealed class AccessSessionValidatorTests
             ExpiresDate = DateTime.UtcNow.AddDays(1),
             CreatedDate = DateTime.UtcNow
         };
-
         dbContext.RefreshTokens.Add(session);
         await dbContext.SaveChangesAsync();
 
@@ -69,12 +79,61 @@ public sealed class AccessSessionValidatorTests
             ("clinic_user_id", clinicUserId.ToString()),
             ("clinic_id", clinicId.ToString()));
         var validator = new AccessSessionValidator(dbContext);
-
         Assert.True(await validator.IsActiveAsync(principal));
 
         session.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
+        Assert.False(await validator.IsActiveAsync(principal));
+    }
 
+    [Fact]
+    public async Task ClinicSession_IsRejectedWhenClinicOrUserIsDisabled()
+    {
+        await using var dbContext = CreateDbContext();
+        var sessionId = Guid.NewGuid();
+        var clinicUserId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var clinic = new Auran.Clinic.Domain.Entities.Clinic
+        {
+            Id = clinicId,
+            Name = "Clinic",
+            Code = "CLINIC-2",
+            IsActive = true
+        };
+        var user = new User
+        {
+            Id = clinicUserId,
+            ClinicId = clinicId,
+            IdentityUserId = Guid.NewGuid().ToString(),
+            FullName = "Clinic User",
+            IsActive = true
+        };
+        dbContext.AddRange(clinic, user, new RefreshToken
+        {
+            Id = sessionId,
+            ClinicId = clinicId,
+            UserId = clinicUserId,
+            TokenHash = "ACTIVE_SESSION_HASH",
+            ExpiresDate = DateTime.UtcNow.AddDays(1),
+            CreatedDate = DateTime.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+
+        var principal = CreatePrincipal(
+            ActorType.Clinic,
+            sessionId,
+            ("clinic_user_id", clinicUserId.ToString()),
+            ("clinic_id", clinicId.ToString()));
+        var validator = new AccessSessionValidator(dbContext);
+        Assert.True(await validator.IsActiveAsync(principal));
+
+        user.IsActive = false;
+        await dbContext.SaveChangesAsync();
+        Assert.False(await validator.IsActiveAsync(principal));
+
+        user.IsActive = true;
+        clinic.IsActive = false;
+        await dbContext.SaveChangesAsync();
         Assert.False(await validator.IsActiveAsync(principal));
     }
 
@@ -83,7 +142,6 @@ public sealed class AccessSessionValidatorTests
     {
         await using var dbContext = CreateDbContext();
         var sessionId = Guid.NewGuid();
-
         dbContext.PlatformRefreshTokens.Add(new PlatformRefreshToken
         {
             Id = sessionId,
@@ -94,13 +152,8 @@ public sealed class AccessSessionValidatorTests
         });
         await dbContext.SaveChangesAsync();
 
-        var principal = CreatePrincipal(
-            ActorType.Platform,
-            sessionId,
-            ("platform_user_id", Guid.NewGuid().ToString()));
-        var validator = new AccessSessionValidator(dbContext);
-
-        Assert.False(await validator.IsActiveAsync(principal));
+        var principal = CreatePrincipal(ActorType.Platform, sessionId, ("platform_user_id", Guid.NewGuid().ToString()));
+        Assert.False(await new AccessSessionValidator(dbContext).IsActiveAsync(principal));
     }
 
     private static AuranClinicDbContext CreateDbContext()
@@ -108,8 +161,7 @@ public sealed class AccessSessionValidatorTests
         var options = new DbContextOptionsBuilder<AuranClinicDbContext>()
             .UseInMemoryDatabase($"access-session-tests-{Guid.NewGuid():N}")
             .Options;
-
-        return new AuranClinicDbContext(options);
+        return new AuranClinicDbContext(options, new TestActor());
     }
 
     private static ClaimsPrincipal CreatePrincipal(
@@ -123,7 +175,19 @@ public sealed class AccessSessionValidatorTests
             new("session_id", sessionId.ToString())
         };
         claims.AddRange(actorClaims.Select(x => new Claim(x.Type, x.Value)));
-
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private sealed class TestActor : ICurrentActor
+    {
+        public bool IsAuthenticated => false;
+        public ActorType ActorType => ActorType.System;
+        public string? IdentityUserId => null;
+        public Guid? PlatformUserId => null;
+        public Guid? ClinicUserId => null;
+        public Guid? ClinicId => null;
+        public bool IsClinicSuperUser => false;
+        public string? DisplayName => null;
+        public string? Email => null;
     }
 }
