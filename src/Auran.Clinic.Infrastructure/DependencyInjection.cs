@@ -1,10 +1,12 @@
 using System.Text;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Features;
 using Auran.Clinic.Application.Files;
+using Auran.Clinic.Application.Users;
 using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
@@ -50,11 +52,25 @@ public static class DependencyInjection
             options.Password.RequireUppercase = true;
             options.Password.RequireLowercase = true;
             options.Password.RequireNonAlphanumeric = false;
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
         })
         .AddEntityFrameworkStores<AuranClinicDbContext>()
         .AddSignInManager();
 
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Jwt:Issuer is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Jwt:Audience is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.SigningKey) && options.SigningKey.Length >= 32,
+                "Jwt:SigningKey must be configured with at least 32 characters.")
+            .Validate(options => options.AccessTokenMinutes is > 0 and <= 60,
+                "Jwt:AccessTokenMinutes must be between 1 and 60.")
+            .Validate(options => options.RefreshTokenDays is > 0 and <= 90,
+                "Jwt:RefreshTokenDays must be between 1 and 90.")
+            .ValidateOnStart();
+
         services.Configure<PlatformBootstrapOptions>(configuration.GetSection(PlatformBootstrapOptions.SectionName));
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
 
@@ -118,6 +134,8 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorageProvider, LocalFileStorageProvider>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IClinicAccessService, ClinicAccessService>();
+        services.AddScoped<IUserAccountService, UserAccountService>();
+        services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<SystemCatalogService>();
         services.AddScoped<PlatformBootstrapService>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
@@ -126,7 +144,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthorizationHandler, ClinicActorAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, PlatformActorAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditAuthorizationMiddlewareResultHandler>();
-        services.AddAuranCaching(configuration);
+        services.AddAuranCaching();
         return services;
     }
 }
