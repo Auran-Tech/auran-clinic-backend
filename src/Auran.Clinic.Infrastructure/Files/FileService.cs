@@ -81,7 +81,7 @@ public sealed class FileService(
         string? contentType,
         CancellationToken cancellationToken = default)
     {
-        var session = await dbContext.Set<FileUploadSession>()
+        var session = await dbContext.FileUploadSessions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == sessionId, cancellationToken);
         if (session is null || !TokenMatches(session.UploadTokenHash, uploadToken))
             return Failure("Upload session is invalid.");
@@ -89,8 +89,13 @@ public sealed class FileService(
         var now = DateTime.UtcNow;
         if (session.ExpiresAtUtc <= now)
         {
-            session.Status = FileUploadStatus.Expired;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.FileUploadSessions
+                .Where(x => x.Id == sessionId && x.Status == FileUploadStatus.Pending)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.Status, FileUploadStatus.Expired)
+                        .SetProperty(x => x.UpdatedDate, now),
+                    cancellationToken);
             return Failure("Upload session has expired.");
         }
         if (session.Status != FileUploadStatus.Pending)
@@ -106,6 +111,18 @@ public sealed class FileService(
             return Failure("Uploaded content type does not match the upload session.");
         }
 
+        // Claim the session atomically before writing any bytes. Only one concurrent PUT
+        // can move Pending -> Uploading; all other attempts are rejected as already used.
+        var claimed = await dbContext.FileUploadSessions
+            .Where(x => x.Id == sessionId && x.Status == FileUploadStatus.Pending && x.ExpiresAtUtc > now)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, FileUploadStatus.Uploading)
+                    .SetProperty(x => x.UpdatedDate, now),
+                cancellationToken);
+        if (claimed != 1)
+            return Failure("Upload session is no longer available for content upload.");
+
         try
         {
             await storageProvider.SaveAsync(
@@ -113,23 +130,42 @@ public sealed class FileService(
                 content,
                 Math.Min(session.ExpectedSize, options.MaxFileSizeBytes),
                 cancellationToken);
+
+            var storedSize = await storageProvider.GetSizeAsync(session.StorageKey, cancellationToken);
+            if (storedSize != session.ExpectedSize)
+            {
+                await storageProvider.DeleteIfExistsAsync(session.StorageKey, cancellationToken);
+                await MarkUploadFailedAsync(sessionId, cancellationToken);
+                return Failure("Uploaded file size does not match the expected file size.");
+            }
+
+            var completed = await dbContext.FileUploadSessions
+                .Where(x => x.Id == sessionId && x.Status == FileUploadStatus.Uploading)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.Status, FileUploadStatus.Uploaded)
+                        .SetProperty(x => x.UploadedAtUtc, now)
+                        .SetProperty(x => x.UpdatedDate, now),
+                    cancellationToken);
+
+            if (completed != 1)
+            {
+                await storageProvider.DeleteIfExistsAsync(session.StorageKey, cancellationToken);
+                return Failure("Upload session state changed before the upload could be completed.");
+            }
+
+            return new FileUploadContentResult { Succeeded = true };
         }
-        catch (InvalidOperationException ex)
+        catch (OperationCanceledException)
         {
+            await SafeDeleteAndFailAsync(sessionId, session.StorageKey);
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            await SafeDeleteAndFailAsync(sessionId, session.StorageKey);
             return Failure(ex.Message);
         }
-
-        var storedSize = await storageProvider.GetSizeAsync(session.StorageKey, cancellationToken);
-        if (storedSize != session.ExpectedSize)
-        {
-            await storageProvider.DeleteIfExistsAsync(session.StorageKey, cancellationToken);
-            return Failure("Uploaded file size does not match the expected file size.");
-        }
-
-        session.Status = FileUploadStatus.Uploaded;
-        session.UploadedAtUtc = now;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return new FileUploadContentResult { Succeeded = true };
     }
 
     public async Task<FileResponse?> CompleteUploadAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -251,7 +287,7 @@ public sealed class FileService(
             ExpiresAtUtc = now.AddMinutes(Math.Clamp(options.UploadSessionMinutes, 1, 120))
         };
 
-        dbContext.Set<FileUploadSession>().Add(session);
+        dbContext.FileUploadSessions.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new FileUploadSessionResponse
@@ -274,7 +310,7 @@ public sealed class FileService(
         CancellationToken cancellationToken)
     {
         var expectedStoragePrefix = $"{clinicId:N}/{requiredStorageCategory}/";
-        var session = await dbContext.Set<FileUploadSession>()
+        var session = await dbContext.FileUploadSessions
             .SingleOrDefaultAsync(
                 x => x.Id == sessionId
                      && x.ClinicId == clinicId
@@ -359,6 +395,38 @@ public sealed class FileService(
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    private async Task MarkUploadFailedAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        await dbContext.FileUploadSessions
+            .Where(x => x.Id == sessionId && x.Status == FileUploadStatus.Uploading)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, FileUploadStatus.Failed)
+                    .SetProperty(x => x.UpdatedDate, DateTime.UtcNow),
+                cancellationToken);
+    }
+
+    private async Task SafeDeleteAndFailAsync(Guid sessionId, string storageKey)
+    {
+        try
+        {
+            await storageProvider.DeleteIfExistsAsync(storageKey, CancellationToken.None);
+        }
+        catch
+        {
+            // Cleanup is best effort. The permanent FileRecord is never created from a failed session.
+        }
+
+        try
+        {
+            await MarkUploadFailedAsync(sessionId, CancellationToken.None);
+        }
+        catch
+        {
+            // Preserve the original upload exception/cancellation if failure-state persistence also fails.
         }
     }
 
