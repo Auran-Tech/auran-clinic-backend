@@ -2,142 +2,95 @@
 
 Backend foundation for the **Auran Clinic Management Platform** by **Auran Technology**.
 
-The product is designed as one backend codebase serving multiple clinics. Clinic-specific differences such as branding, workflow, patient profile configuration, clinical fields, prescription sections, timezone, and welcome content are driven by configuration and data — never customer-specific code.
+Auran Clinic is one backend codebase serving multiple clinics. Clinic differences such as branding, workflow, patient profile configuration, clinical fields, clinical-order sections, timezone, localization and welcome content are configuration/data driven — never customer-specific code.
 
-## Current Phase
-
-**V1 backend foundation and implementation.**
-
-The immediate implementation order is:
-
-1. Authentication and current user context.
-2. Clinic context and multi-clinic data isolation.
-3. System roles, permissions, and protected Super User behavior.
-4. Patients and duplicate detection.
-5. Workflow configuration and live queue.
-6. Visits and multi-session visits.
-7. Dynamic patient profile and clinical fields.
-8. Prescriptions / clinical orders, follow-ups, files, reports, settings, and audit.
-
-## Solution Structure
-
-```text
-Auran.Clinic.sln
-
-src/
-  Auran.Clinic.Api/
-  Auran.Clinic.Application/
-  Auran.Clinic.Domain/
-  Auran.Clinic.Infrastructure/
-
-tests/
-  Auran.Clinic.UnitTests/
-  Auran.Clinic.IntegrationTests/
-```
-
-There is intentionally **no Shared project or Shared layer**.
-
-### Auran.Clinic.Api
-
-HTTP boundary only:
-
-- Controllers
-- Middleware
-- Authentication wiring
-- Authorization wiring
-- Swagger / OpenAPI
-- Dependency injection
-- Health checks
-
-### Auran.Clinic.Application
-
-Application use cases and service contracts:
-
-- Services
-- DTOs
-- Validators
-- Filters
-- Application models
-- Persistence/auth/storage abstractions
-
-### Auran.Clinic.Domain
-
-Business model and business rules:
-
-- Entities
-- Enums
-- Constants
-- Domain policies
-- Domain exceptions
-
-The Domain project does not depend on ASP.NET Core or EF Core.
-
-### Auran.Clinic.Infrastructure
-
-Technical implementations:
-
-- Entity Framework Core
-- SQL Server
-- Identity persistence
-- Repositories
-- File storage
-- Seed data
-- External implementations
-
-## Technology
+## Runtime and Architecture
 
 - .NET 10 LTS
 - ASP.NET Core Web API
 - Entity Framework Core
 - SQL Server
-- ASP.NET Core Identity
-- JWT Bearer Authentication
+- ASP.NET Core Identity for credentials
+- JWT Bearer authentication
+- Permission-based Auran RBAC
 - FluentValidation
 - Serilog
 - Swagger / OpenAPI
 - xUnit
+- Layered modular monolith
+- No Shared project/layer
+- No API version prefix in V1
 
-## Multi-Clinic Foundation
-
-V1 contains only the foundation required to serve multiple clinics. Future SaaS concerns such as subscription billing, plan management, owner billing portal, and platform administration are intentionally not implemented now.
-
-Current rules:
-
-- One frontend codebase.
-- One backend codebase.
-- Multiple clinics.
-- No clinic-specific branches in code.
-- Business data must always belong to a clinic.
-- Branding and configuration belong to the clinic.
-- Future SaaS features must be additive, not require rewriting clinic business modules.
-
-## Standard Service Responses
-
-Application services use the agreed response models in `Auran.Clinic.Application.Models`.
-
-```csharp
-public class BaseResponse
-{
-    public string? Message { get; set; }
-    public bool Status { get; set; }
-    public string? Error { get; set; }
-}
-
-public class BaseResponse<T> : BaseResponse where T : class
-{
-    public T? Data { get; set; }
-}
+```text
+Auran.Clinic.sln
+src/
+  Auran.Clinic.Api/
+  Auran.Clinic.Application/
+  Auran.Clinic.Domain/
+  Auran.Clinic.Infrastructure/
+tests/
+  Auran.Clinic.UnitTests/
+  Auran.Clinic.IntegrationTests/
 ```
 
-Pagination uses one standard application model:
+## Multi-Clinic Boundary
 
-```csharp
-public class PaginatedResponse<T>
-{
-    public List<T> Data { get; set; } = new List<T>();
-    public required PaginationInfo Setting { get; set; }
-}
+Every clinic-owned business entity inherits `ClinicEntity` and carries `ClinicId`. Authenticated EF Core queries are tenant-filtered by the current request context, and writes are rejected when an entity attempts to cross the authenticated clinic boundary.
+
+`ICurrentUserContext` is the single request-context abstraction and exposes authentication state, `UserId`, `ClinicId` and `IsSuperUser`.
+
+A clinic can be deactivated through `Clinic.IsActive`; when inactive, login, refresh and existing JWT requests for every account in that clinic are rejected. Individual users have an explicit `User.IsActive` state and disabling a user revokes active refresh tokens.
+
+## Permissions
+
+Permission authorization is backend-owned. Stable keys use underscore-style identifiers such as:
+
+```text
+Patient_Create
+Queue_Move
+Users_Manage_Status
 ```
+
+Permissions are seeded as system data. Localized descriptions live in `PermissionTranslation` rows keyed by language code. English and Arabic are seeded initially; additional languages such as German or French are data additions and do not require schema changes.
+
+Super Users receive the complete effective permission catalog from the backend and also satisfy every permission authorization policy.
+
+## Code Generation
+
+Reusable sequential code generation uses `CodeCounter` with a unique `(ClinicId, CodeType, ScopeKey)` boundary and concurrency protection. For patient numbers, the year is used as the scope key so each clinic receives an independent yearly sequence.
+
+## Caching
+
+V1 uses `IDistributedCache` backed by in-memory caching only. Redis is intentionally not an active dependency in the current implementation and can be introduced later when a measured multi-instance use case requires it.
+
+## API Convention
+
+V1 endpoints follow:
+
+```text
+/api/{controller}/{endpoint}
+```
+
+Examples:
+
+```text
+POST /api/auth/login
+GET  /api/auth/me
+POST /api/auth/refresh
+POST /api/auth/logout
+GET  /api/permissions/list
+PUT  /api/users/status
+POST /api/users/disable-self
+```
+
+## Health
+
+```text
+GET /health/live
+GET /health/ready
+```
+
+`live` confirms that the application process is running. `ready` verifies SQL Server connectivity.
 
 ## Run Locally
 
@@ -146,48 +99,35 @@ Prerequisites:
 - .NET 10 SDK
 - SQL Server
 
-Clone and build:
-
 ```bash
-git clone https://github.com/Auran-Tech/auran-clinic-backend.git
-cd auran-clinic-backend
-dotnet restore
-dotnet build
-dotnet test
-```
-
-Run the API:
-
-```bash
+dotnet restore Auran.Clinic.sln
+dotnet build Auran.Clinic.sln
+dotnet test Auran.Clinic.sln
 dotnet run --project src/Auran.Clinic.Api
 ```
 
-Swagger is available in Development mode after the API starts.
-
 ## Docker Development Stack
 
-The repository contains a multi-stage `Dockerfile` plus `docker-compose.yml` for API, SQL Server, and Redis.
+The local compose stack contains the API and SQL Server. Redis is not part of the active V1 runtime.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Set a strong local SQL Server password in `.env` before starting the stack. Production secrets must be provided by the deployment environment and must not be committed.
-
 ## CI
 
-GitHub Actions restores, builds, tests, and publishes the API for pushes and pull requests to `main`.
+GitHub Actions restores, builds, runs unit and SQL Server-backed integration tests, then publishes the API for changes targeting `main`.
 
 ## Repository Rules
 
-- Do not add customer-specific implementations.
-- Do not expose EF entities directly from API endpoints.
-- Keep controllers thin.
-- Business rules belong outside controllers.
-- Do not add a `Shared` project.
-- Do not add API versioning in V1.
-- Do not commit secrets or production connection strings.
+- No customer-specific implementations.
+- No EF entities exposed directly from API endpoints.
+- Thin controllers; business rules live outside controllers.
+- No Shared project/layer.
+- No V1 API version prefix.
+- Every implemented flow requires appropriate automated tests.
+- Clinic isolation and authorization are mandatory for clinic-owned functionality.
 
 ---
 
