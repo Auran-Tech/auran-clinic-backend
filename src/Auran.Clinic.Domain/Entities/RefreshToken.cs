@@ -7,6 +7,7 @@ public class RefreshToken : ClinicEntity
     public DateTime ExpiresDate { get; set; }
     public DateTime? RevokedDate { get; set; }
     public string? ReplacedByTokenHash { get; set; }
+    public byte[] RowVersion { get; set; } = [];
 
     public bool IsActive => RevokedDate is null && ExpiresDate > DateTime.UtcNow;
 }
