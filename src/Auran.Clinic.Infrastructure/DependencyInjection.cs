@@ -34,9 +34,6 @@ public static class DependencyInjection
             options.Password.RequireUppercase = true;
             options.Password.RequireLowercase = true;
             options.Password.RequireNonAlphanumeric = false;
-            options.Lockout.AllowedForNewUsers = true;
-            options.Lockout.MaxFailedAccessAttempts = 5;
-            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
         })
         .AddEntityFrameworkStores<AuranClinicDbContext>()
         .AddSignInManager();
@@ -77,7 +74,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
-        services.AddAuranCaching(configuration);
+        services.AddAuranCaching();
         return services;
     }
 }
