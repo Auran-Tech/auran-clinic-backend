@@ -1,3 +1,4 @@
+using Auran.Clinic.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ClinicEntity = Auran.Clinic.Domain.Entities.Clinic;
@@ -9,7 +10,6 @@ public class ClinicConfiguration : IEntityTypeConfiguration<ClinicEntity>
     public void Configure(EntityTypeBuilder<ClinicEntity> builder)
     {
         builder.ToTable("Clinics");
-
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Name)
@@ -20,13 +20,16 @@ public class ClinicConfiguration : IEntityTypeConfiguration<ClinicEntity>
             .HasMaxLength(50)
             .IsRequired();
 
-        builder.HasIndex(x => x.Code)
-            .IsUnique();
-
+        builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.PrimaryColor).HasMaxLength(20);
         builder.Property(x => x.SecondaryColor).HasMaxLength(20);
         builder.Property(x => x.FontFamily).HasMaxLength(100);
         builder.Property(x => x.TimeZoneId).HasMaxLength(100);
         builder.Property(x => x.PatientNumberPrefix).HasMaxLength(20);
+
+        builder.HasOne<FileRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.LogoFileId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
