@@ -1,5 +1,6 @@
 using Auran.Clinic.Application.Models;
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -21,7 +22,7 @@ public sealed class FluentValidationFilter : IAsyncActionFilter
 
             dynamic dynamicValidator = validator;
             dynamic dynamicModel = model;
-            var result = await dynamicValidator.ValidateAsync(
+            var result = (ValidationResult)await dynamicValidator.ValidateAsync(
                 dynamicModel,
                 context.HttpContext.RequestAborted);
 
