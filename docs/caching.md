@@ -1,37 +1,26 @@
-# Cache Provider Configuration
+# Caching
 
-The backend exposes one distributed-cache abstraction and chooses the implementation from configuration.
+Auran Clinic keeps the `IDistributedCache` abstraction available, but the active V1 implementation is **in-memory only**.
 
-## Memory
-
-Use for local development or single-instance environments:
-
-```json
-"Cache": {
-  "Provider": "Memory"
-}
+```csharp
+services.AddDistributedMemoryCache();
 ```
 
-## Redis
+Redis is not part of the active runtime, NuGet graph, production configuration or Docker Compose stack.
 
-Use for production or multiple API instances:
+## Why
 
-```json
-"Cache": {
-  "Provider": "Redis",
-  "Redis": {
-    "ConnectionString": "redis:6379",
-    "InstanceName": "AuranClinic:"
-  }
-}
-```
+The current foundation does not yet have a measured multi-instance use case that requires a remote distributed cache. Keeping Redis active before a real requirement would add deployment and operational complexity without providing current product value.
 
-Recommended production configuration is through environment variables rather than committed secrets:
+## Future Redis Adoption
 
-```text
-Cache__Provider=Redis
-Cache__Redis__ConnectionString=<redis-connection-string>
-Cache__Redis__InstanceName=AuranClinic:
-```
+Redis may be introduced later when there is a concrete requirement such as multiple API instances sharing cache state or measured cache-heavy workloads. That change must be explicit and should include:
 
-The application receives `IDistributedCache` regardless of provider, so business code does not need Memory/Redis-specific branches.
+- package/runtime dependency;
+- secret-managed connection configuration;
+- cache key conventions including clinic scope;
+- invalidation strategy;
+- resilience behavior when Redis is unavailable;
+- integration/load tests.
+
+Business code should continue depending on cache abstractions rather than Redis-specific APIs.
