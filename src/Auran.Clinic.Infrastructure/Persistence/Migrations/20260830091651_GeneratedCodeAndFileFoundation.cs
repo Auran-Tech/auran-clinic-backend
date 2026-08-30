@@ -26,6 +26,9 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 name: "IX_Files_UploadedByUserId",
                 table: "Files");
 
+            // Preserve the actor ids already stored by the previous file foundation.
+            // Before this migration those ids could only reference clinic Users because
+            // both columns had physical FKs to Users, so the safe legacy actor type is Clinic.
             migrationBuilder.RenameColumn(
                 name: "RequestedByUserId",
                 table: "FileUploadSessions",
@@ -41,16 +44,46 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                 table: "FileUploadSessions",
                 type: "nvarchar(20)",
                 maxLength: 20,
-                nullable: false,
-                defaultValue: "");
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "UploadedByActorType",
                 table: "Files",
                 type: "nvarchar(20)",
                 maxLength: 20,
+                nullable: true);
+
+            migrationBuilder.Sql("""
+                UPDATE [FileUploadSessions]
+                SET [RequestedByActorType] = 'Clinic'
+                WHERE [RequestedByActorType] IS NULL;
+
+                UPDATE [Files]
+                SET [UploadedByActorType] = 'Clinic'
+                WHERE [UploadedByActorType] IS NULL;
+                """);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "RequestedByActorType",
+                table: "FileUploadSessions",
+                type: "nvarchar(20)",
+                maxLength: 20,
                 nullable: false,
-                defaultValue: "");
+                oldClrType: typeof(string),
+                oldType: "nvarchar(20)",
+                oldMaxLength: 20,
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "UploadedByActorType",
+                table: "Files",
+                type: "nvarchar(20)",
+                maxLength: 20,
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "nvarchar(20)",
+                oldMaxLength: 20,
+                oldNullable: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_FileUploadSessions_RequestedByActorType_RequestedByActorId",
@@ -66,6 +99,27 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // The old schema can represent only clinic User actors. Refuse to collapse
+            // Platform actor rows into a clinic User FK because that would either corrupt
+            // attribution or fail with a less actionable foreign-key error.
+            migrationBuilder.Sql("""
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [FileUploadSessions]
+                    WHERE [RequestedByActorType] <> 'Clinic'
+                )
+                    THROW 51020, 'Cannot downgrade file upload sessions containing non-clinic actors.', 1;
+
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [Files]
+                    WHERE [UploadedByActorType] <> 'Clinic'
+                )
+                    THROW 51021, 'Cannot downgrade files containing non-clinic upload actors.', 1;
+                """);
+
             migrationBuilder.DropIndex(
                 name: "IX_FileUploadSessions_RequestedByActorType_RequestedByActorId",
                 table: "FileUploadSessions");
