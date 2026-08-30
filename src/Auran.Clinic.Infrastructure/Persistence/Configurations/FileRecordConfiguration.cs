@@ -14,7 +14,9 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
         builder.Property(x => x.ContentType).HasMaxLength(200);
         builder.Property(x => x.StorageProvider).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.StorageKey).HasMaxLength(500);
+        builder.Property(x => x.UploadedByActorType).HasConversion<string>().HasMaxLength(20);
         builder.HasIndex(x => x.StorageKey).IsUnique();
         builder.HasIndex(x => new { x.ClinicId, x.UploadedAtUtc });
+        builder.HasIndex(x => new { x.UploadedByActorType, x.UploadedByActorId });
     }
 }
