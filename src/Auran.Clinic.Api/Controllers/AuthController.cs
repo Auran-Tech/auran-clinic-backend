@@ -16,34 +16,20 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
-    [SwaggerOperation(
-        Summary = "Authenticate a clinic user",
-        Description = "Authenticates a clinic account only. On success returns a clinic-scoped JWT, rotating refresh token, clinic context, roles and effective clinic permissions. Platform accounts must use /api/platform/auth/login.",
-        OperationId = "Auth_Login",
-        Tags = new[] { "Authentication" })]
-    [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    [SwaggerOperation(Summary = "Authenticate a clinic user", OperationId = "Auth_Login", Tags = new[] { "Authentication" })]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Login(
         [FromBody] LoginApiRequest request,
         CancellationToken cancellationToken)
     {
         var result = await authService.LoginAsync(request.ToServiceRequest(), cancellationToken);
         if (result is null)
-            return Unauthorized(new BaseResponse { Status = false, Message = "Invalid email or password." });
+            return Unauthorized(new BaseResponse { Status = false, Message = "Invalid credentials or inactive account." });
         return Ok(new BaseResponse<AuthResponse> { Status = true, Data = result });
     }
 
     [AllowAnonymous]
     [HttpPost("refresh")]
-    [SwaggerOperation(
-        Summary = "Rotate a clinic refresh token",
-        Description = "Exchanges a valid clinic refresh token for a new clinic JWT and replacement refresh token. Rotation revokes the previous session, so its access token can no longer authorize protected endpoints. Suspended clinics cannot refresh sessions.",
-        OperationId = "Auth_RefreshToken",
-        Tags = new[] { "Authentication" })]
-    [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    [SwaggerOperation(Summary = "Rotate a clinic refresh token", OperationId = "Auth_RefreshToken", Tags = new[] { "Authentication" })]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Refresh(
         [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
@@ -55,16 +41,23 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     }
 
     [Authorize(Policy = ActorPolicies.Clinic)]
-    [HttpPost("logout")]
+    [HttpGet("me")]
     [SwaggerOperation(
-        Summary = "Log out a clinic user",
-        Description = "Revokes the supplied clinic authentication session. The access token associated with that session becomes invalid immediately for protected endpoints. Requires a valid active-clinic JWT.",
-        OperationId = "Auth_Logout",
+        Summary = "Get the current clinic user",
+        Description = "Returns the backend-calculated effective roles and permission keys. Super Users receive every clinic permission key from the backend.",
+        OperationId = "Auth_Me",
         Tags = new[] { "Authentication" })]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<BaseResponse<CurrentUserResponse>>> Me(CancellationToken cancellationToken)
+    {
+        var result = await authService.GetCurrentAsync(cancellationToken);
+        if (result is null)
+            return Unauthorized(new BaseResponse { Status = false, Message = "Authentication session is not active." });
+        return Ok(new BaseResponse<CurrentUserResponse> { Status = true, Data = result });
+    }
+
+    [Authorize(Policy = ActorPolicies.Clinic)]
+    [HttpPost("logout")]
+    [SwaggerOperation(Summary = "Log out a clinic user", OperationId = "Auth_Logout", Tags = new[] { "Authentication" })]
     public async Task<ActionResult<BaseResponse>> Logout(
         [FromBody] RefreshTokenApiRequest request,
         CancellationToken cancellationToken)
