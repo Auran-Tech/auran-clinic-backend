@@ -44,7 +44,13 @@ public sealed class FileService(
         if (!TryGetClinicActor(out var clinicId, out var userId))
             return null;
 
-        return await CreateUploadSessionCoreAsync(clinicId, userId, request, "files", cancellationToken);
+        return await CreateUploadSessionCoreAsync(
+            clinicId,
+            ActorType.Clinic,
+            userId,
+            request,
+            "files",
+            cancellationToken);
     }
 
     public async Task<FileUploadSessionResponse?> CreateClinicBrandingUploadSessionAsync(
@@ -58,7 +64,13 @@ public sealed class FileService(
             return null;
 
         ValidateBrandingImage(request);
-        return await CreateUploadSessionCoreAsync(clinicId, platformUserId, request, "branding", cancellationToken);
+        return await CreateUploadSessionCoreAsync(
+            clinicId,
+            ActorType.Platform,
+            platformUserId,
+            request,
+            "branding",
+            cancellationToken);
     }
 
     public async Task<FileUploadContentResult> UploadContentAsync(
@@ -125,7 +137,13 @@ public sealed class FileService(
         if (!TryGetClinicActor(out var clinicId, out var userId))
             return null;
 
-        return await CompleteUploadCoreAsync(clinicId, userId, sessionId, "files", cancellationToken);
+        return await CompleteUploadCoreAsync(
+            clinicId,
+            ActorType.Clinic,
+            userId,
+            sessionId,
+            "files",
+            cancellationToken);
     }
 
     public async Task<FileResponse?> CompleteClinicBrandingUploadAsync(
@@ -138,7 +156,13 @@ public sealed class FileService(
         if (!await dbContext.Clinics.AsNoTracking().AnyAsync(x => x.Id == clinicId, cancellationToken))
             return null;
 
-        return await CompleteUploadCoreAsync(clinicId, platformUserId, sessionId, "branding", cancellationToken);
+        return await CompleteUploadCoreAsync(
+            clinicId,
+            ActorType.Platform,
+            platformUserId,
+            sessionId,
+            "branding",
+            cancellationToken);
     }
 
     public async Task<FileResponse?> GetAsync(Guid fileId, CancellationToken cancellationToken = default)
@@ -187,6 +211,7 @@ public sealed class FileService(
 
     private async Task<FileUploadSessionResponse> CreateUploadSessionCoreAsync(
         Guid clinicId,
+        ActorType requesterType,
         Guid requesterId,
         CreateFileUploadSessionRequest request,
         string storageCategory,
@@ -213,7 +238,8 @@ public sealed class FileService(
         {
             Id = sessionId,
             ClinicId = clinicId,
-            RequestedByUserId = requesterId,
+            RequestedByActorType = requesterType,
+            RequestedByActorId = requesterId,
             OriginalName = originalName,
             FileExtension = extension,
             ContentType = request.ContentType.Trim(),
@@ -241,6 +267,7 @@ public sealed class FileService(
 
     private async Task<FileResponse?> CompleteUploadCoreAsync(
         Guid clinicId,
+        ActorType requesterType,
         Guid requesterId,
         Guid sessionId,
         string requiredStorageCategory,
@@ -251,7 +278,8 @@ public sealed class FileService(
             .SingleOrDefaultAsync(
                 x => x.Id == sessionId
                      && x.ClinicId == clinicId
-                     && x.RequestedByUserId == requesterId
+                     && x.RequestedByActorType == requesterType
+                     && x.RequestedByActorId == requesterId
                      && x.StorageKey.StartsWith(expectedStoragePrefix),
                 cancellationToken);
         if (session is null)
@@ -273,6 +301,8 @@ public sealed class FileService(
         }
         if (session.Status != FileUploadStatus.Uploaded)
             throw new InvalidOperationException("File content must be uploaded before completing the session.");
+        if (session.StorageProvider != storageProvider.Provider)
+            throw new InvalidOperationException("Upload session storage provider is not available.");
 
         var storedSize = await storageProvider.GetSizeAsync(session.StorageKey, cancellationToken);
         if (storedSize != session.ExpectedSize)
@@ -298,7 +328,8 @@ public sealed class FileService(
                 StorageProvider = session.StorageProvider,
                 StorageKey = session.StorageKey,
                 UploadedAtUtc = session.UploadedAtUtc ?? now,
-                UploadedByUserId = requesterId
+                UploadedByActorType = requesterType,
+                UploadedByActorId = requesterId
             };
             dbContext.Files.Add(file);
 
