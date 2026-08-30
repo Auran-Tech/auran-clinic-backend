@@ -4,7 +4,8 @@ namespace Auran.Clinic.Domain.Entities;
 
 public class FileUploadSession : ClinicEntity
 {
-    public Guid RequestedByUserId { get; set; }
+    public ActorType RequestedByActorType { get; set; }
+    public Guid RequestedByActorId { get; set; }
     public required string OriginalName { get; set; }
     public required string FileExtension { get; set; }
     public required string ContentType { get; set; }
