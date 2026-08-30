@@ -2,7 +2,9 @@ using System.Threading.RateLimiting;
 using Auran.Clinic.Api.Filters;
 using Auran.Clinic.Api.Middleware;
 using Auran.Clinic.Application;
+using Auran.Clinic.Application.Users;
 using Auran.Clinic.Infrastructure;
+using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -16,6 +18,7 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<FluentValidationFilter>();
+builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.AddService<FluentValidationFilter>();
