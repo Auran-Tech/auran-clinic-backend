@@ -36,18 +36,13 @@ public sealed class AuthService(
         if (user is null)
             return null;
 
-        var passwordResult = await signInManager.CheckPasswordSignInAsync(
-            identityUser,
-            request.Password,
-            lockoutOnFailure: true);
-
+        var passwordResult = await signInManager.CheckPasswordSignInAsync(identityUser, request.Password, true);
         if (!passwordResult.Succeeded)
         {
             await WriteAuthAuditAsync(user, identityUser, "Authentication.LoginFailed",
                 passwordResult.IsLockedOut
                     ? "Login was blocked because the Identity account is temporarily locked."
-                    : "Login failed because the supplied credentials were invalid.",
-                cancellationToken);
+                    : "Login failed because the supplied credentials were invalid.", cancellationToken);
             return null;
         }
 
@@ -62,7 +57,6 @@ public sealed class AuthService(
             .Where(x => x.Id == user.ClinicId)
             .Select(x => x.IsActive)
             .SingleOrDefaultAsync(cancellationToken);
-
         if (!clinicIsActive)
         {
             await WriteAuthAuditAsync(user, identityUser, "Authentication.LoginBlocked",
@@ -73,20 +67,16 @@ public sealed class AuthService(
         var response = await CreateSessionAsync(user, identityUser, cancellationToken);
         await WriteAuthAuditAsync(user, identityUser, "Authentication.LoginSucceeded",
             "Clinic user signed in successfully.", cancellationToken);
-
         return response;
     }
 
-    public async Task<AuthResponse?> RefreshAsync(
-        RefreshTokenRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return null;
 
         var tokenHash = HashToken(request.RefreshToken.Trim());
         var now = DateTime.UtcNow;
-
         var refreshToken = await dbContext.RefreshTokens.AsNoTracking()
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
         if (refreshToken is null || refreshToken.RevokedDate is not null || refreshToken.ExpiresDate <= now)
@@ -106,43 +96,31 @@ public sealed class AuthService(
             return null;
 
         var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
-        if (identityUser is null
-            || identityUser.AccountType != AccountType.Clinic
-            || await userManager.IsLockedOutAsync(identityUser))
-        {
+        if (identityUser is null || identityUser.AccountType != AccountType.Clinic || await userManager.IsLockedOutAsync(identityUser))
             return null;
-        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             var revokedRows = await dbContext.RefreshTokens
                 .Where(x => x.Id == refreshToken.Id && x.RevokedDate == null && x.ExpiresDate > now)
-                .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(x => x.RevokedDate, now),
-                    cancellationToken);
-
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RevokedDate, now), cancellationToken);
             if (revokedRows != 1)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return null;
             }
 
-            var response = await CreateSessionAsync(user, identityUser, cancellationToken, saveChanges: false);
+            var response = await CreateSessionAsync(user, identityUser, cancellationToken, false);
             await dbContext.SaveChangesAsync(cancellationToken);
-
             var replacementHash = HashToken(response.RefreshToken);
             await dbContext.RefreshTokens
                 .Where(x => x.Id == refreshToken.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(x => x.ReplacedByTokenHash, replacementHash),
-                    cancellationToken);
-
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ReplacedByTokenHash, replacementHash), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             await WriteAuthAuditAsync(user, identityUser, "Authentication.TokenRefreshed",
                 "Clinic access and refresh tokens were rotated successfully.", cancellationToken);
-
             return response;
         }
         catch
@@ -152,42 +130,75 @@ public sealed class AuthService(
         }
     }
 
+    public async Task<CurrentUserResponse?> GetCurrentAsync(CancellationToken cancellationToken = default)
+    {
+        if (!currentActor.IsAuthenticated
+            || currentActor.ActorType != ActorType.Clinic
+            || currentActor.ClinicUserId is not Guid userId
+            || currentActor.ClinicId is not Guid clinicId)
+        {
+            return null;
+        }
+
+        var user = await dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == userId && x.ClinicId == clinicId && x.IsActive, cancellationToken);
+        if (user is null)
+            return null;
+
+        var clinicIsActive = await dbContext.Clinics.AsNoTracking()
+            .AnyAsync(x => x.Id == clinicId && x.IsActive, cancellationToken);
+        if (!clinicIsActive)
+            return null;
+
+        var roleIds = await dbContext.UserRoles.AsNoTracking()
+            .Where(x => x.UserId == userId && x.ClinicId == clinicId)
+            .Select(x => x.RoleId)
+            .ToListAsync(cancellationToken);
+        var roles = await dbContext.Roles.AsNoTracking()
+            .Where(x => x.ClinicId == clinicId && roleIds.Contains(x.Id))
+            .Select(x => x.Code)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+        var permissions = await GetEffectivePermissionsAsync(user, roleIds, cancellationToken);
+
+        return new CurrentUserResponse
+        {
+            UserId = user.Id,
+            ClinicId = user.ClinicId,
+            FullName = user.FullName,
+            Email = user.Email,
+            IsClinicSuperUser = user.IsClinicSuperUser,
+            Roles = roles,
+            Permissions = permissions
+        };
+    }
+
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(refreshToken)
             || currentActor.ActorType != ActorType.Clinic
             || currentActor.ClinicUserId is not Guid currentUserId
             || currentActor.ClinicId is not Guid currentClinicId)
-        {
             return;
-        }
 
         var tokenHash = HashToken(refreshToken.Trim());
-        var entity = await dbContext.RefreshTokens
-            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-
-        if (entity is null
-            || entity.RevokedDate is not null
-            || entity.UserId != currentUserId
-            || entity.ClinicId != currentClinicId)
-        {
+        var entity = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (entity is null || entity.RevokedDate is not null || entity.UserId != currentUserId || entity.ClinicId != currentClinicId)
             return;
-        }
 
         entity.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var user = await dbContext.Users.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == entity.UserId, cancellationToken);
+        var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == entity.UserId, cancellationToken);
+        if (user is null)
+            return;
 
-        if (user is not null)
+        var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
+        if (identityUser is not null)
         {
-            var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
-            if (identityUser is not null)
-            {
-                await WriteAuthAuditAsync(user, identityUser, "Authentication.Logout",
-                    "Clinic authentication session was revoked during logout.", cancellationToken);
-            }
+            await WriteAuthAuditAsync(user, identityUser, "Authentication.Logout",
+                "Clinic authentication session was revoked during logout.", cancellationToken);
         }
     }
 
@@ -201,30 +212,13 @@ public sealed class AuthService(
             .Where(x => x.ClinicId == user.ClinicId && x.UserId == user.Id)
             .Select(x => x.RoleId)
             .ToListAsync(cancellationToken);
-
         var roles = await dbContext.Roles.AsNoTracking()
             .Where(x => x.ClinicId == user.ClinicId && roleIds.Contains(x.Id))
             .Select(x => x.Code)
             .Distinct()
+            .OrderBy(x => x)
             .ToListAsync(cancellationToken);
-
-        var permissions = user.IsClinicSuperUser
-            ? await dbContext.Permissions.AsNoTracking()
-                .Where(x => x.Scope == PermissionScope.Clinic)
-                .Select(x => x.Code)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToListAsync(cancellationToken)
-            : await (from rolePermission in dbContext.RolePermissions.AsNoTracking()
-                     join permission in dbContext.Permissions.AsNoTracking()
-                         on rolePermission.PermissionId equals permission.Id
-                     where rolePermission.ClinicId == user.ClinicId
-                           && roleIds.Contains(rolePermission.RoleId)
-                           && permission.Scope == PermissionScope.Clinic
-                     select permission.Code)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToListAsync(cancellationToken);
+        var permissions = await GetEffectivePermissionsAsync(user, roleIds, cancellationToken);
 
         var now = DateTime.UtcNow;
         var sessionId = Guid.NewGuid();
@@ -241,7 +235,6 @@ public sealed class AuthService(
             ExpiresDate = now.AddDays(_jwt.RefreshTokenDays),
             CreatedDate = now
         });
-
         if (saveChanges)
             await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -261,6 +254,33 @@ public sealed class AuthService(
                 Permissions = permissions
             }
         };
+    }
+
+    private async Task<List<string>> GetEffectivePermissionsAsync(
+        User user,
+        IReadOnlyCollection<Guid> roleIds,
+        CancellationToken cancellationToken)
+    {
+        if (user.IsClinicSuperUser)
+        {
+            return await dbContext.Permissions.AsNoTracking()
+                .Where(x => x.Scope == PermissionScope.Clinic)
+                .Select(x => x.Code)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync(cancellationToken);
+        }
+
+        return await (from rolePermission in dbContext.RolePermissions.AsNoTracking()
+                      join permission in dbContext.Permissions.AsNoTracking()
+                          on rolePermission.PermissionId equals permission.Id
+                      where rolePermission.ClinicId == user.ClinicId
+                            && roleIds.Contains(rolePermission.RoleId)
+                            && permission.Scope == PermissionScope.Clinic
+                      select permission.Code)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
     }
 
     private string CreateAccessToken(
@@ -284,19 +304,12 @@ public sealed class AuthService(
             new(ClaimTypes.Email, identityUser.Email ?? user.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
-
         claims.AddRange(roles.Select(role => new Claim("clinic_role", role)));
         claims.AddRange(permissions.Select(permission => new Claim("clinic_permission", permission)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(
-            _jwt.Issuer,
-            _jwt.Audience,
-            claims,
-            expires: expiresDate,
-            signingCredentials: credentials);
-
+        var token = new JwtSecurityToken(_jwt.Issuer, _jwt.Audience, claims, expires: expiresDate, signingCredentials: credentials);
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
@@ -323,10 +336,7 @@ public sealed class AuthService(
         }, cancellationToken);
 
     private static string CreateRefreshToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private static string HashToken(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token.Trim())));
