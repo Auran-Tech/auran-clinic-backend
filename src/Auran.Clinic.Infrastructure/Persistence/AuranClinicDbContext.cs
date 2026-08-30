@@ -1,4 +1,5 @@
 using Auran.Clinic.Application.Abstractions;
+using Auran.Clinic.Domain.Common;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence.Configurations;
@@ -61,7 +62,7 @@ public class AuranClinicDbContext(
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        EnforceClinicBoundary();
+        PrepareChanges();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
@@ -69,8 +70,39 @@ public class AuranClinicDbContext(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
-        EnforceClinicBoundary();
+        PrepareChanges();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void PrepareChanges()
+    {
+        StampAuditFields();
+        EnforceClinicBoundary();
+    }
+
+    private void StampAuditFields()
+    {
+        var now = DateTime.UtcNow;
+        var userId = currentUserContext.UserId;
+
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                if (entry.Entity.Id == Guid.Empty)
+                    entry.Entity.Id = Guid.NewGuid();
+
+                if (entry.Entity.CreatedDate == default)
+                    entry.Entity.CreatedDate = now;
+
+                entry.Entity.CreateByUserId ??= userId;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedDate = now;
+                entry.Entity.UpdatedByUserId = userId;
+            }
+        }
     }
 
     private void EnforceClinicBoundary()
@@ -123,6 +155,7 @@ public class AuranClinicDbContext(
         ApplyClinicQueryFilter<PatientAttachment>(modelBuilder);
         ApplyClinicQueryFilter<ClinicalOrderAttachment>(modelBuilder);
         ApplyClinicQueryFilter<FollowUp>(modelBuilder);
+        ApplyClinicQueryFilter<ClinicSettings>(modelBuilder);
         ApplyClinicQueryFilter<AuditLog>(modelBuilder);
     }
 
