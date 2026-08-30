@@ -8,7 +8,7 @@ public static class SystemRoleCatalog
     public const string Nurse = "NURSE";
 
     private static readonly string[] AllClinicPermissions =
-        SystemPermissionCatalog.Clinic.Select(x => x.Code).ToArray();
+        SystemPermissionCatalog.Clinic.Select(x => x.Key).ToArray();
 
     public static readonly IReadOnlyCollection<SystemRoleDefinition> All = new[]
     {
