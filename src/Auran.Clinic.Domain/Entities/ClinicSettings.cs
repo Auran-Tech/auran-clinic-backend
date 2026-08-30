@@ -1,10 +1,7 @@
-using Auran.Clinic.Domain.Common;
-
 namespace Auran.Clinic.Domain.Entities;
 
-public class ClinicSettings : BaseEntity
+public class ClinicSettings : ClinicEntity
 {
-    public Guid ClinicId { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
