@@ -2,38 +2,24 @@
 
 ## Goal
 
-Build the V1 backend quickly without creating architecture that must be replaced when more clinics join the platform.
+Build Auran Clinic V1 quickly on a foundation that remains safe when multiple clinics share the same backend and database.
 
 ## Fixed Decisions
 
-- Solution name: `Auran.Clinic`.
-- Repository: `Auran-Tech/auran-clinic-backend`.
-- Runtime: .NET 8.
+- Solution: `Auran.Clinic`.
+- Runtime: .NET 10 LTS.
 - Database: SQL Server.
 - Persistence: Entity Framework Core.
 - Architecture: layered modular monolith.
 - No Shared project/layer.
-- No API versioning in V1.
-- Standard responses live in `Auran.Clinic.Application.Models`.
+- No API version prefix in V1.
+- API route convention: `/api/{controller}/{endpoint}`.
 - One frontend and one backend serve multiple clinics.
 - Clinic-specific behavior is configuration/data driven.
-- Future subscriptions, billing, owner portal and platform administration are out of scope for V1.
+- Redis is deferred; the active cache implementation is distributed in-memory caching.
+- Future subscriptions, billing, owner portal and platform administration remain outside V1.
 
 ## Dependency Direction
-
-```text
-Api ------------> Application
- |                    |
- |                    v
- +------------> Infrastructure ----> Domain
-                      |
-Application ----------+
-      |
-      v
-    Domain
-```
-
-Actual project references are intentionally simpler:
 
 ```text
 Application    -> Domain
@@ -41,28 +27,74 @@ Infrastructure -> Application, Domain
 Api            -> Application, Infrastructure
 ```
 
-## Multi-Clinic Boundary
+## Current Request Context
 
-Every clinic-owned business entity added from this point must have an explicit clinic boundary. The implementation must never contain customer-name checks such as:
+`ICurrentUserContext` is the single request-context abstraction:
 
-```csharp
-if (clinicCode == "CustomerA") { ... }
+```text
+IsAuthenticated
+UserId
+ClinicId
+IsSuperUser
 ```
 
-Instead, differences must be represented by configuration such as workflow statuses, clinical fields, profile definitions, prescription sections, branding, timezone, and settings.
+JWT claims provide the authenticated values. Client-supplied clinic identifiers are never an authorization boundary.
 
-## First Implementation Milestone
+## Multi-Clinic Isolation
 
-The first milestone should implement only:
+Clinic-owned entities inherit `ClinicEntity` and carry `ClinicId`.
 
-1. Authentication.
-2. Current user context.
-3. Current clinic context.
-4. System roles and permissions.
-5. Protected Super User behavior.
-6. Patient registration/search/duplicate detection.
-7. Workflow statuses and transitions.
-8. Live queue.
-9. Visit creation and visit sessions.
+The persistence boundary uses defense in depth:
 
-After that foundation is stable, implement dynamic clinical data, prescriptions, files, follow-ups, reports, settings and audit.
+1. JWT contains `clinic_id`.
+2. `ICurrentUserContext` resolves the authenticated clinic.
+3. EF Core global query filters scope clinic-owned reads.
+4. `SaveChanges` rejects cross-clinic writes and automatically sets an empty `ClinicId` on new authenticated entities.
+5. Services still validate aggregate-specific ownership where required.
+
+Pre-authentication flows such as login and refresh may use `IgnoreQueryFilters()` only when they explicitly validate clinic ownership and active state themselves.
+
+## Account State
+
+`User.IsActive` controls an individual clinic account. `Clinic.IsActive` controls the entire clinic. Login, refresh and JWT validation all enforce both states, so deactivation invalidates existing authenticated traffic immediately.
+
+Account-state changes are explicit business operations. They are not implemented as automatic failed-password business locks.
+
+## Permissions
+
+Auran RBAC is independent of ASP.NET Core Identity roles. Identity owns credentials; Auran owns `Role`, `Permission`, `UserRole` and `RolePermission`.
+
+Permission keys are stable backend identifiers such as `Patient_Create` and `Queue_Move`. Human descriptions are stored separately in `PermissionTranslation` by language code. English and Arabic are initially seeded; additional languages are data-only additions.
+
+A Super User:
+
+- is still restricted to its clinic;
+- satisfies every backend permission policy;
+- receives every effective permission key from the backend response.
+
+## Persistence Invariants
+
+- one current `QueueEntry` per `Visit`;
+- SQL Server rowversion on `QueueEntry` and `Visit`;
+- only one active `VisitSession` per visit;
+- normalized multi-select patient-profile values;
+- `FollowUp` is the follow-up source of truth;
+- clinic logos reference `FileRecord` metadata;
+- reusable `CodeCounter` generates clinic/scoped sequences transactionally.
+
+## Security Baseline
+
+- HTTPS redirection;
+- JWT signature/lifetime validation;
+- active user and clinic validation on JWT requests;
+- permission authorization;
+- clinic query/write isolation;
+- FluentValidation request validation;
+- CORS whitelist;
+- login rate limiting;
+- global exception handling;
+- liveness and SQL readiness health checks.
+
+## Testing Baseline
+
+Completed foundation behavior must have automated tests. CI runs .NET 10 restore/build/test/publish and provides SQL Server for integration tests. Priority coverage includes authentication, current context, Super User effective permissions, permission denial, account/clinic deactivation, tenant isolation, code generation and persistence concurrency/invariants.
