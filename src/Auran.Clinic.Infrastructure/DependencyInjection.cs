@@ -1,6 +1,7 @@
 using System.Text;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Authentication;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Caching;
@@ -71,6 +72,7 @@ public static class DependencyInjection
         services.AddAuthorization();
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
