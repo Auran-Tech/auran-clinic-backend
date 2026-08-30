@@ -47,6 +47,12 @@ public static class DomainRelationshipConfiguration
             .HasForeignKey(x => x.PermissionId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<PermissionTranslation>()
+            .HasOne<Permission>()
+            .WithMany()
+            .HasForeignKey(x => x.PermissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<RefreshToken>()
             .HasOne<User>()
             .WithMany()
@@ -65,6 +71,7 @@ public static class DomainRelationshipConfiguration
         ConfigureClinic<User>(modelBuilder);
         ConfigureClinic<UserRole>(modelBuilder);
         ConfigureClinic<RefreshToken>(modelBuilder);
+        ConfigureClinic<CodeCounter>(modelBuilder);
         ConfigureClinic<Patient>(modelBuilder);
         ConfigureClinic<PatientCondition>(modelBuilder);
         ConfigureClinic<PatientAllergy>(modelBuilder);
@@ -73,6 +80,7 @@ public static class DomainRelationshipConfiguration
         ConfigureClinic<PatientProfileField>(modelBuilder);
         ConfigureClinic<PatientProfileFieldOption>(modelBuilder);
         ConfigureClinic<PatientProfileValue>(modelBuilder);
+        ConfigureClinic<PatientProfileValueOption>(modelBuilder);
         ConfigureClinic<ClinicalField>(modelBuilder);
         ConfigureClinic<ClinicalFieldOption>(modelBuilder);
         ConfigureClinic<ClinicalMeasurement>(modelBuilder);
@@ -164,6 +172,17 @@ public static class DomainRelationshipConfiguration
             .HasOne<FileRecord>()
             .WithMany()
             .HasForeignKey(x => x.FileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PatientProfileValueOption>()
+            .HasOne<PatientProfileValue>()
+            .WithMany()
+            .HasForeignKey(x => x.PatientProfileValueId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<PatientProfileValueOption>()
+            .HasOne<PatientProfileFieldOption>()
+            .WithMany()
+            .HasForeignKey(x => x.OptionId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 
@@ -271,8 +290,8 @@ public static class DomainRelationshipConfiguration
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueEntry>()
             .HasOne<Visit>()
-            .WithMany()
-            .HasForeignKey(x => x.VisitId)
+            .WithOne()
+            .HasForeignKey<QueueEntry>(x => x.VisitId)
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QueueEntry>()
             .HasOne<User>()
