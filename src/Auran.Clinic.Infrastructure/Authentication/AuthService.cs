@@ -18,6 +18,8 @@ namespace Auran.Clinic.Infrastructure.Authentication;
 public sealed class AuthService(
     AuranClinicDbContext dbContext,
     UserManager<ApplicationIdentityUser> userManager,
+    SignInManager<ApplicationIdentityUser> signInManager,
+    ICurrentActor currentActor,
     IOptions<JwtOptions> jwtOptions,
     IAuditService auditService) : IAuthService
 {
@@ -34,10 +36,25 @@ public sealed class AuthService(
         if (user is null)
             return null;
 
-        if (!await userManager.CheckPasswordAsync(identityUser, request.Password))
+        var passwordResult = await signInManager.CheckPasswordSignInAsync(
+            identityUser,
+            request.Password,
+            lockoutOnFailure: true);
+
+        if (!passwordResult.Succeeded)
         {
             await WriteAuthAuditAsync(user, identityUser, "Authentication.LoginFailed",
-                "Login failed because the supplied credentials were invalid.", cancellationToken);
+                passwordResult.IsLockedOut
+                    ? "Login was blocked because the Identity account is temporarily locked."
+                    : "Login failed because the supplied credentials were invalid.",
+                cancellationToken);
+            return null;
+        }
+
+        if (!user.IsActive)
+        {
+            await WriteAuthAuditAsync(user, identityUser, "Authentication.LoginBlocked",
+                "Login was blocked because the clinic user account is inactive.", cancellationToken);
             return null;
         }
 
@@ -67,8 +84,7 @@ public sealed class AuthService(
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return null;
 
-        var rawRefreshToken = request.RefreshToken.Trim();
-        var tokenHash = HashToken(rawRefreshToken);
+        var tokenHash = HashToken(request.RefreshToken.Trim());
         var now = DateTime.UtcNow;
 
         var refreshToken = await dbContext.RefreshTokens.AsNoTracking()
@@ -86,12 +102,16 @@ public sealed class AuthService(
         var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
             x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
             cancellationToken);
-        if (user is null)
+        if (user is null || !user.IsActive)
             return null;
 
         var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
-        if (identityUser is null || identityUser.AccountType != AccountType.Clinic)
+        if (identityUser is null
+            || identityUser.AccountType != AccountType.Clinic
+            || await userManager.IsLockedOutAsync(identityUser))
+        {
             return null;
+        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -134,15 +154,25 @@ public sealed class AuthService(
 
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(refreshToken))
+        if (string.IsNullOrWhiteSpace(refreshToken)
+            || currentActor.ActorType != ActorType.Clinic
+            || currentActor.ClinicUserId is not Guid currentUserId
+            || currentActor.ClinicId is not Guid currentClinicId)
+        {
             return;
+        }
 
         var tokenHash = HashToken(refreshToken.Trim());
         var entity = await dbContext.RefreshTokens
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
-        if (entity is null || entity.RevokedDate is not null)
+        if (entity is null
+            || entity.RevokedDate is not null
+            || entity.UserId != currentUserId
+            || entity.ClinicId != currentClinicId)
+        {
             return;
+        }
 
         entity.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -179,7 +209,12 @@ public sealed class AuthService(
             .ToListAsync(cancellationToken);
 
         var permissions = user.IsClinicSuperUser
-            ? new List<string>()
+            ? await dbContext.Permissions.AsNoTracking()
+                .Where(x => x.Scope == PermissionScope.Clinic)
+                .Select(x => x.Code)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync(cancellationToken)
             : await (from rolePermission in dbContext.RolePermissions.AsNoTracking()
                      join permission in dbContext.Permissions.AsNoTracking()
                          on rolePermission.PermissionId equals permission.Id
@@ -188,6 +223,7 @@ public sealed class AuthService(
                            && permission.Scope == PermissionScope.Clinic
                      select permission.Code)
                 .Distinct()
+                .OrderBy(x => x)
                 .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
