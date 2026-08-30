@@ -67,6 +67,42 @@ public static class DependencyInjection
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        var userIdValue = context.Principal?.FindFirst("user_id")?.Value;
+                        var clinicIdValue = context.Principal?.FindFirst("clinic_id")?.Value;
+                        if (!Guid.TryParse(userIdValue, out var userId) ||
+                            !Guid.TryParse(clinicIdValue, out var clinicId))
+                        {
+                            context.Fail("Required account claims are missing.");
+                            return;
+                        }
+
+                        var dbContext = context.HttpContext.RequestServices
+                            .GetRequiredService<AuranClinicDbContext>();
+
+                        var accountIsActive = await dbContext.Users
+                            .IgnoreQueryFilters()
+                            .AsNoTracking()
+                            .AnyAsync(
+                                x => x.Id == userId &&
+                                     x.ClinicId == clinicId &&
+                                     x.IsActive,
+                                context.HttpContext.RequestAborted);
+
+                        var clinicIsActive = accountIsActive && await dbContext.Clinics
+                            .AsNoTracking()
+                            .AnyAsync(
+                                x => x.Id == clinicId && x.IsActive,
+                                context.HttpContext.RequestAborted);
+
+                        if (!clinicIsActive)
+                            context.Fail("The clinic or user account is inactive.");
+                    }
+                };
             });
 
         services.AddAuthorization();
