@@ -1,4 +1,5 @@
 using System.Text;
+using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
@@ -33,13 +34,26 @@ public static class DependencyInjection
             options.Password.RequireUppercase = true;
             options.Password.RequireLowercase = true;
             options.Password.RequireNonAlphanumeric = false;
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
         })
         .AddEntityFrameworkStores<AuranClinicDbContext>()
         .AddSignInManager();
 
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Jwt:Issuer is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Jwt:Audience is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.SigningKey) && options.SigningKey.Length >= 32,
+                "Jwt:SigningKey must be at least 32 characters.")
+            .ValidateOnStart();
+
         var jwt = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is required.");
+
+        if (string.IsNullOrWhiteSpace(jwt.SigningKey) || jwt.SigningKey.Length < 32)
+            throw new InvalidOperationException("Jwt:SigningKey must be supplied securely and contain at least 32 characters.");
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -60,7 +74,7 @@ public static class DependencyInjection
         services.AddAuthorization();
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddAuranCaching(configuration);
