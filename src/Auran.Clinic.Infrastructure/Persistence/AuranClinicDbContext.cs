@@ -15,7 +15,7 @@ public class AuranClinicDbContext(
     : IdentityUserContext<ApplicationIdentityUser>(options)
 {
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
-    public DbSet<User> Users => Set<User>();
+    public new DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<PermissionTranslation> PermissionTranslations => Set<PermissionTranslation>();
