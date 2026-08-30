@@ -1,65 +1,91 @@
 # Authentication & RBAC Foundation
 
-## Purpose
+## Authentication
 
-This feature establishes the authentication and authorization foundation for Auran Clinic. It is intentionally clinic-aware from the beginning so future modules can rely on a consistent user, clinic and permission context.
+- ASP.NET Core Identity owns credentials and password hashing.
+- Domain `User` stores clinic/business identity and references the Identity user by `IdentityUserId`.
+- Login returns a JWT access token plus a rotating refresh token.
+- Refresh tokens are cryptographically random; only SHA-256 hashes are persisted.
+- Refresh rotation is optimistic-concurrency protected.
+- Logout can revoke only a refresh token belonging to the authenticated user and clinic.
 
-## Authentication model
+## Current Context
 
-- ASP.NET Core Identity stores credentials and password hashes.
-- The domain `User` remains the business user record and references the Identity user through `IdentityUserId`.
-- Login returns a short-lived JWT access token and a rotating refresh token.
-- Refresh tokens are stored as SHA-256 hashes; raw refresh tokens are returned only to the client.
-- Refresh token rotation revokes the consumed token and creates a replacement.
-- Logout revokes the supplied refresh token.
+`ICurrentUserContext` is the only request-context abstraction:
 
-## JWT claims
-
-Access tokens contain `user_id`, `clinic_id`, `super_user`, role claims and permission claims. This allows normal API authorization to avoid a database query on every request.
-
-## RBAC rules
-
-- A user may have multiple roles through `UserRole`.
-- Roles aggregate permissions through `RolePermission`.
-- System roles are platform-defined. Their identity and permissions are not intended to be renamed, deleted or edited through clinic administration.
-- A Super User bypasses permission checks and is expected to see every page and capability inside the clinic.
-- Normal users receive the union of permissions from all assigned roles.
-- Permission policy names use `Permission:<PermissionCode>`, for example `Permission:Patients.View`.
-
-## Multi-clinic boundary
-
-The authenticated token carries `ClinicId`. Application services must always scope clinic-owned data using the authenticated clinic context. A client-supplied ClinicId must never be trusted as the authorization boundary.
-
-## Refresh token lifecycle
-
-1. Successful login creates a cryptographically random refresh token.
-2. Only its SHA-256 hash is persisted.
-3. Refresh validates that the token exists, belongs to an active user and has not expired/revoked.
-4. The old token is revoked and replaced atomically.
-5. A new access token and refresh token are returned.
-
-## Permission usage
-
-```csharp
-[Authorize(Policy = PermissionPolicy.For(Permissions.Patients.View))]
+```text
+IsAuthenticated
+UserId
+ClinicId
+IsSuperUser
 ```
 
-Super users satisfy every permission requirement automatically.
+JWT access tokens contain `user_id`, `clinic_id`, `super_user`, role claims and effective permission claims.
 
-## Configuration
+## Account and Clinic State
 
-`Jwt` settings contain Issuer, Audience, SigningKey, AccessTokenMinutes and RefreshTokenDays. Production signing keys must be provided through environment/secret configuration and must not be committed to source control.
+`User.IsActive` is the explicit individual account state. `Clinic.IsActive` is the clinic-wide state.
 
-## Security notes
+Login, refresh and JWT validation all require both states to be active. This means disabling a clinic rejects all accounts immediately, including requests using access tokens issued before the clinic was disabled.
 
-- Passwords are never stored in the domain user table.
-- ASP.NET Core Identity owns password hashing and verification.
-- Refresh tokens are never stored in plaintext.
-- JWT signing keys must be secret-managed in production.
-- Authentication is not a replacement for clinic-scoped queries; tenant isolation must still be enforced in services/repositories.
+A user can disable their own account. Administrative account status changes require `Users_Manage_Status` or the protected Super User bypass. A normal manager cannot disable another Super User. Disabling a user revokes all active refresh tokens.
 
-## V1 scope
+## RBAC
 
-Included: login, JWT generation, refresh token rotation, logout/revocation, current-user context, multiple roles per user, permission claims, dynamic permission policies and Super User bypass.
+Identity roles are not used for business authorization. Auran owns:
 
-Not included yet: MFA, password reset/email delivery, account invitation workflow, external identity providers, owner subscription portal, cross-clinic user switching and patient mobile authentication.
+```text
+Role
+Permission
+UserRole
+RolePermission
+```
+
+Normal users receive the union of permission keys assigned by all their roles.
+
+A Super User:
+
+- remains limited to their own clinic;
+- satisfies every permission requirement in the backend;
+- receives the complete permission key catalog from login and `/api/auth/me`.
+
+The frontend therefore consumes backend-calculated effective permissions and does not create a separate Super User permission model.
+
+## Permission Keys and Localization
+
+Stable permission keys use underscore identifiers, for example:
+
+```text
+Patient_View
+Patient_Create
+Queue_Move
+Users_Manage_Status
+```
+
+`Permission` stores the stable key and grouping metadata. `PermissionTranslation` stores localized human descriptions by language code. English and Arabic are initially seeded. Additional languages are inserted as data without changing the schema or permission key.
+
+Permission policies continue to use the `Permission:` policy prefix internally:
+
+```csharp
+[Authorize(Policy = PermissionPolicy.Prefix + Permissions.PatientView)]
+```
+
+## Multi-Clinic Boundary
+
+Authentication does not replace tenant isolation. Clinic-owned EF entities are automatically query-filtered by the current clinic, and the DbContext rejects authenticated cross-clinic writes.
+
+`IgnoreQueryFilters()` is reserved for explicit infrastructure cases such as login/refresh where no authenticated clinic context exists yet and ownership/status are validated directly.
+
+## API
+
+```text
+POST /api/auth/login
+GET  /api/auth/me
+POST /api/auth/refresh
+POST /api/auth/logout
+GET  /api/permissions/list
+PUT  /api/users/status
+POST /api/users/disable-self
+```
+
+The login endpoint is rate-limited and request DTOs use FluentValidation.
