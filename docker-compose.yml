@@ -8,13 +8,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
-      Cache__Provider: Redis
-      Cache__Redis__ConnectionString: redis:6379
-      Cache__Redis__InstanceName: AuranClinic:
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
     depends_on:
       sqlserver:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   sqlserver:
@@ -32,16 +28,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
 volumes:
   sql-data:
