@@ -13,31 +13,35 @@ public sealed class SystemCatalogService(AuranClinicDbContext dbContext)
     public async Task<Dictionary<string, Permission>> EnsurePermissionsAsync(
         CancellationToken cancellationToken = default)
     {
-        var codes = SystemPermissionCatalog.All.Select(x => x.Code).ToArray();
+        var keys = SystemPermissionCatalog.All.Select(x => x.Key).ToArray();
         var existing = await dbContext.Permissions
-            .Where(x => codes.Contains(x.Code))
+            .Where(x => keys.Contains(x.Code))
             .ToDictionaryAsync(x => x.Code, StringComparer.Ordinal, cancellationToken);
 
         foreach (var definition in SystemPermissionCatalog.All)
         {
-            if (existing.TryGetValue(definition.Code, out var permission))
+            if (!existing.TryGetValue(definition.Key, out var permission))
             {
-                permission.Name = definition.Name;
+                permission = new Permission
+                {
+                    Id = Guid.NewGuid(),
+                    Code = definition.Key,
+                    Name = definition.Key,
+                    Group = definition.Group,
+                    Scope = definition.Scope
+                };
+                dbContext.Permissions.Add(permission);
+                existing[definition.Key] = permission;
+            }
+            else
+            {
+                permission.Name = definition.Key;
                 permission.Group = definition.Group;
                 permission.Scope = definition.Scope;
-                continue;
             }
 
-            permission = new Permission
-            {
-                Id = Guid.NewGuid(),
-                Code = definition.Code,
-                Name = definition.Name,
-                Group = definition.Group,
-                Scope = definition.Scope
-            };
-            dbContext.Permissions.Add(permission);
-            existing[definition.Code] = permission;
+            await UpsertTranslationAsync(permission.Id, "en", definition.EnglishDescription, cancellationToken);
+            await UpsertTranslationAsync(permission.Id, "ar", definition.ArabicDescription, cancellationToken);
         }
 
         return existing;
@@ -74,5 +78,31 @@ public sealed class SystemCatalogService(AuranClinicDbContext dbContext)
         }
 
         return existing;
+    }
+
+    private async Task UpsertTranslationAsync(
+        Guid permissionId,
+        string languageCode,
+        string description,
+        CancellationToken cancellationToken)
+    {
+        var translation = await dbContext.PermissionTranslations
+            .SingleOrDefaultAsync(
+                x => x.PermissionId == permissionId && x.LanguageCode == languageCode,
+                cancellationToken);
+
+        if (translation is null)
+        {
+            dbContext.PermissionTranslations.Add(new PermissionTranslation
+            {
+                Id = Guid.NewGuid(),
+                PermissionId = permissionId,
+                LanguageCode = languageCode,
+                Description = description
+            });
+            return;
+        }
+
+        translation.Description = description;
     }
 }
