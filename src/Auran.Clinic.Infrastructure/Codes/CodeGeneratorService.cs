@@ -51,7 +51,7 @@ public sealed class CodeGeneratorService(
             command.Transaction = currentTransaction.GetDbTransaction();
             command.CommandText = """
                 SET NOCOUNT ON;
-                DECLARE @NextNumber TABLE ([Value] int NOT NULL);
+                DECLARE @NextNumber TABLE ([Value] bigint NOT NULL);
 
                 UPDATE [CodeCounters] WITH (UPDLOCK, HOLDLOCK)
                 SET [LastNumber] = [LastNumber] + 1,
@@ -94,7 +94,7 @@ public sealed class CodeGeneratorService(
             var scalar = await command.ExecuteScalarAsync(cancellationToken);
             var nextNumber = scalar is null or DBNull
                 ? throw new InvalidOperationException("The next business code number could not be generated.")
-                : Convert.ToInt32(scalar);
+                : Convert.ToInt64(scalar);
 
             if (ownsTransaction && transaction is not null)
                 await transaction.CommitAsync(cancellationToken);
