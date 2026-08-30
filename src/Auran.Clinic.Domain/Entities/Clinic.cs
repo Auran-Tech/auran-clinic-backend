@@ -10,7 +10,7 @@ public class Clinic : BaseEntity
 
     public bool IsActive { get; set; } = true;
 
-    public string? LogoUrl { get; set; }
+    public Guid? LogoFileId { get; set; }
 
     public string? PrimaryColor { get; set; }
 
