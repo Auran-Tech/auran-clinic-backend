@@ -30,23 +30,31 @@ public sealed class AccessSessionValidator(AuranClinicDbContext dbContext)
                 cancellationToken);
         }
 
-        if (string.Equals(actorType, ActorType.Clinic.ToString(), StringComparison.Ordinal))
+        if (!string.Equals(actorType, ActorType.Clinic.ToString(), StringComparison.Ordinal)
+            || !Guid.TryParse(principal.FindFirstValue("clinic_user_id"), out var clinicUserId)
+            || !Guid.TryParse(principal.FindFirstValue("clinic_id"), out var clinicId))
         {
-            if (!Guid.TryParse(principal.FindFirstValue("clinic_user_id"), out var clinicUserId)
-                || !Guid.TryParse(principal.FindFirstValue("clinic_id"), out var clinicId))
-            {
-                return false;
-            }
-
-            return await dbContext.RefreshTokens.AsNoTracking().AnyAsync(
-                x => x.Id == sessionId
-                     && x.UserId == clinicUserId
-                     && x.ClinicId == clinicId
-                     && x.RevokedDate == null
-                     && x.ExpiresDate > now,
-                cancellationToken);
+            return false;
         }
 
-        return false;
+        var sessionIsActive = await dbContext.RefreshTokens.AsNoTracking().AnyAsync(
+            x => x.Id == sessionId
+                 && x.UserId == clinicUserId
+                 && x.ClinicId == clinicId
+                 && x.RevokedDate == null
+                 && x.ExpiresDate > now,
+            cancellationToken);
+        if (!sessionIsActive)
+            return false;
+
+        var userIsActive = await dbContext.Users.AsNoTracking().AnyAsync(
+            x => x.Id == clinicUserId && x.ClinicId == clinicId && x.IsActive,
+            cancellationToken);
+        if (!userIsActive)
+            return false;
+
+        return await dbContext.Clinics.AsNoTracking().AnyAsync(
+            x => x.Id == clinicId && x.IsActive,
+            cancellationToken);
     }
 }
