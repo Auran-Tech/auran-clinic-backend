@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
+        services.AddScoped<ICodeGenerator, CodeGenerator>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
