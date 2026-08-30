@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Auran.Clinic.Api.Filters;
 using Auran.Clinic.Api.Middleware;
 using Auran.Clinic.Application;
 using Auran.Clinic.Infrastructure;
@@ -14,7 +15,11 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddControllers();
+builder.Services.AddScoped<FluentValidationFilter>();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.AddService<FluentValidationFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
