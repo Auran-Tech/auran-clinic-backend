@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Models;
@@ -61,6 +62,32 @@ public sealed class AccountStateAuthFlowTests(ApiFactory factory) : IClassFixtur
         var response = await client.PostAsJsonAsync(
             "/api/auth/refresh",
             new RefreshTokenRequest { RefreshToken = session.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExistingAccessToken_AfterUserIsDisabled_IsRejected()
+    {
+        var fixture = await CreateAccountAsync(userIsActive: true, clinicIsActive: true);
+        using var client = factory.CreateClient();
+        var session = await LoginAsync(client, fixture.Credentials);
+        await SetUserStatusAsync(fixture.UserId, false);
+
+        var response = await LogoutResponseAsync(client, session);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExistingAccessToken_AfterClinicIsDisabled_IsRejected()
+    {
+        var fixture = await CreateAccountAsync(userIsActive: true, clinicIsActive: true);
+        using var client = factory.CreateClient();
+        var session = await LoginAsync(client, fixture.Credentials);
+        await SetClinicStatusAsync(fixture.ClinicId, false);
+
+        var response = await LogoutResponseAsync(client, session);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -148,6 +175,19 @@ public sealed class AccountStateAuthFlowTests(ApiFactory factory) : IClassFixtur
         Assert.True(envelope.Status);
         Assert.NotNull(envelope.Data);
         return envelope.Data;
+    }
+
+    private static Task<HttpResponseMessage> LogoutResponseAsync(HttpClient client, AuthResponse session)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout")
+        {
+            Content = JsonContent.Create(new RefreshTokenRequest
+            {
+                RefreshToken = session.RefreshToken
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
+        return client.SendAsync(request);
     }
 
     private sealed record AccountFixture(Guid ClinicId, Guid UserId, TestCredentials Credentials);
