@@ -19,9 +19,9 @@ public sealed class PermissionCatalogService(
 
         var permissions = await dbContext.Permissions.AsNoTracking()
             .Where(x => x.Scope == scope)
-            .OrderBy(x => x.Group)
-            .ThenBy(x => x.Code)
-            .Select(x => new { x.Id, x.Code, x.Group, x.Scope })
+            .OrderBy(x => x.GroupKey)
+            .ThenBy(x => x.Key)
+            .Select(x => new { x.Id, x.Key, x.GroupKey, x.Scope })
             .ToListAsync(cancellationToken);
 
         var ids = permissions.Select(x => x.Id).ToArray();
@@ -41,8 +41,8 @@ public sealed class PermissionCatalogService(
 
         return permissions.Select(permission => new PermissionCatalogResponse
         {
-            Key = permission.Code,
-            Group = permission.Group,
+            Key = permission.Key,
+            Group = permission.GroupKey,
             Scope = permission.Scope,
             Descriptions = descriptions.GetValueOrDefault(permission.Id)
                 ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
