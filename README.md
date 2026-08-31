@@ -2,24 +2,34 @@
 
 Backend foundation for the **Auran Clinic Management Platform** by **Auran Technology**.
 
-The product is designed as one backend codebase serving multiple clinics. Clinic-specific differences such as branding, workflow, patient profile configuration, clinical fields, prescription sections, timezone, and welcome content are driven by configuration and data — never customer-specific code.
+The product uses one backend codebase for multiple clinics. Clinic differences such as branding, workflow, patient profile configuration, clinical fields, prescription sections, timezone, feature availability, and welcome content are driven by data and configuration — never customer-specific code branches.
 
-## Current Phase
+## Current phase
 
-**V1 backend foundation and implementation.**
+The clinic/platform foundation is implemented and being hardened before the next patient-management feature slice.
 
-The immediate implementation order is:
+Current foundation includes:
 
-1. Authentication and current user context.
-2. Clinic context and multi-clinic data isolation.
-3. System roles, permissions, and protected Super User behavior.
-4. Patients and duplicate detection.
-5. Workflow configuration and live queue.
-6. Visits and multi-session visits.
-7. Dynamic patient profile and clinical fields.
-8. Prescriptions / clinical orders, follow-ups, files, reports, settings, and audit.
+- .NET 10 modular-monolith solution structure.
+- SQL Server + EF Core migrations.
+- ASP.NET Core Identity credential storage.
+- Separate Clinic and Platform authentication scopes.
+- JWT access tokens with server-side revocable sessions.
+- Clinic tenant query filters and write guards.
+- Clinic activation/suspension enforcement.
+- Clinic user activation/disable workflow.
+- Clinic Super User effective permissions calculated by the backend.
+- Global permission keys with multilingual `PermissionTranslation` records.
+- Protected clinic roles and Platform RBAC.
+- Platform Admin secure bootstrap and clinic provisioning.
+- Generic concurrency-safe business-code generation.
+- Memory-only caching for V1.
+- File upload-session foundation.
+- Central audit foundation.
+- Global exception handling, validation, CORS, login rate limiting, and health checks.
+- Unit, contract, and SQL-backed integration tests.
 
-## Solution Structure
+## Solution structure
 
 ```text
 Auran.Clinic.sln
@@ -37,59 +47,28 @@ tests/
 
 There is intentionally **no Shared project or Shared layer**.
 
-### Auran.Clinic.Api
+### `Auran.Clinic.Api`
 
-HTTP boundary only:
+HTTP boundary only: controllers, middleware, authentication/authorization wiring, OpenAPI, DI, validation, rate limiting, and health checks.
 
-- Controllers
-- Middleware
-- Authentication wiring
-- Authorization wiring
-- Swagger / OpenAPI
-- Dependency injection
-- Health checks
+### `Auran.Clinic.Application`
 
-### Auran.Clinic.Application
+Application contracts and use-case models: service interfaces, DTOs, validators, filters, response models, authorization catalogs, and infrastructure abstractions.
 
-Application use cases and service contracts:
+### `Auran.Clinic.Domain`
 
-- Services
-- DTOs
-- Validators
-- Filters
-- Application models
-- Persistence/auth/storage abstractions
+Business entities, enums, constants, and domain concepts. The Domain project does not depend on ASP.NET Core or EF Core.
 
-### Auran.Clinic.Domain
+### `Auran.Clinic.Infrastructure`
 
-Business model and business rules:
-
-- Entities
-- Enums
-- Constants
-- Domain policies
-- Domain exceptions
-
-The Domain project does not depend on ASP.NET Core or EF Core.
-
-### Auran.Clinic.Infrastructure
-
-Technical implementations:
-
-- Entity Framework Core
-- SQL Server
-- Identity persistence
-- Repositories
-- File storage
-- Seed data
-- External implementations
+Technical implementations: EF Core, SQL Server, Identity persistence, authentication services, tenant enforcement, business-code generation, memory caching, file storage, audit, catalog seeding, and platform/clinic services.
 
 ## Technology
 
-- .NET 10 LTS
+- .NET 10
 - ASP.NET Core Web API
-- Entity Framework Core
-- SQL Server
+- Entity Framework Core 10
+- SQL Server 2022
 - ASP.NET Core Identity
 - JWT Bearer Authentication
 - FluentValidation
@@ -97,63 +76,97 @@ Technical implementations:
 - Swagger / OpenAPI
 - xUnit
 
-## Multi-Clinic Foundation
+## Security scopes
 
-V1 contains only the foundation required to serve multiple clinics. Future SaaS concerns such as subscription billing, plan management, owner billing portal, and platform administration are intentionally not implemented now.
+AURAN Platform administration and clinic operation are intentionally separate.
 
-Current rules:
+```text
+Platform actor
+  -> platform RBAC
+  -> clinic lifecycle / features / platform audit
 
-- One frontend codebase.
-- One backend codebase.
-- Multiple clinics.
-- No clinic-specific branches in code.
-- Business data must always belong to a clinic.
-- Branding and configuration belong to the clinic.
-- Future SaaS features must be additive, not require rewriting clinic business modules.
-
-## Standard Service Responses
-
-Application services use the agreed response models in `Auran.Clinic.Application.Models`.
-
-```csharp
-public class BaseResponse
-{
-    public string? Message { get; set; }
-    public bool Status { get; set; }
-    public string? Error { get; set; }
-}
-
-public class BaseResponse<T> : BaseResponse where T : class
-{
-    public T? Data { get; set; }
-}
+Clinic actor
+  -> ClinicId tenant boundary
+  -> clinic RBAC
+  -> clinic business modules
 ```
 
-Pagination uses one standard application model:
+A Platform Admin is not a Clinic Super User. A Clinic Super User receives all **clinic-scoped** permissions from the backend but cannot access another clinic or platform administration.
 
-```csharp
-public class PaginatedResponse<T>
-{
-    public List<T> Data { get; set; } = new List<T>();
-    public required PaginationInfo Setting { get; set; }
-}
+Every clinic-owned EF entity is protected by the authenticated clinic context through global query filters and write-boundary validation.
+
+## Permissions
+
+Permission identity is language-independent:
+
+```text
+Patient_View
+Patient_Create
+Users_Manage_Status
+Settings_Manage
 ```
 
-## Run Locally
+Localized descriptions are stored separately:
+
+```text
+Permission
+  Key
+  GroupKey
+  Scope
+
+PermissionTranslation
+  PermissionId
+  LanguageCode
+  Description
+```
+
+Adding another language does not require adding database columns or changing permission keys.
+
+## API route convention
+
+Implemented controllers use:
+
+```text
+/api/{controller-name}/{endpoint-name}
+```
+
+Examples:
+
+```text
+POST /api/auth/login
+GET  /api/auth/me
+GET  /api/clinic/get-current
+GET  /api/clinic/get-settings
+POST /api/platform-auth/login
+POST /api/platform-clinics/create
+GET  /api/platform-clinics/search
+GET  /api/permissions/list
+```
+
+Stable Swagger `OperationId` values are part of the API contract and are covered by automated tests.
+
+## Run locally
 
 Prerequisites:
 
 - .NET 10 SDK
 - SQL Server
 
-Clone and build:
-
 ```bash
 git clone https://github.com/Auran-Tech/auran-clinic-backend.git
 cd auran-clinic-backend
+dotnet tool restore
 dotnet restore
 dotnet build
 dotnet test
+```
+
+Apply migrations:
+
+```bash
+dotnet ef database update \
+  --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+  --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj
 ```
 
 Run the API:
@@ -162,32 +175,43 @@ Run the API:
 dotnet run --project src/Auran.Clinic.Api
 ```
 
-Swagger is available in Development mode after the API starts.
+Swagger is available in Development mode after startup.
 
-## Docker Development Stack
+## Docker development stack
 
-The repository contains a multi-stage `Dockerfile` plus `docker-compose.yml` for API, SQL Server, and Redis.
+The repository contains a multi-stage `Dockerfile` and `docker-compose.yml` for:
+
+- API
+- SQL Server 2022
+
+Redis is not part of the current runtime.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Set a strong local SQL Server password in `.env` before starting the stack. Production secrets must be provided by the deployment environment and must not be committed.
+Set a strong local SQL Server password and JWT signing key in `.env`. Production secrets must come from the deployment environment.
 
 ## CI
 
-GitHub Actions restores, builds, tests, and publishes the API for pushes and pull requests to `main`.
+Pull-request CI restores and builds the solution, applies all EF Core migrations to a clean SQL Server 2022 database, verifies that the EF model has no pending migration changes, runs automated tests (including SQL-backed integration flows), and publishes the API.
 
-## Repository Rules
+## Repository rules
 
 - Do not add customer-specific implementations.
+- Do not trust caller-supplied `ClinicId` as an authorization boundary.
 - Do not expose EF entities directly from API endpoints.
 - Keep controllers thin.
-- Business rules belong outside controllers.
+- Keep business logic outside controllers.
+- Do not introduce a second RBAC system through ASP.NET Identity roles.
 - Do not add a `Shared` project.
 - Do not add API versioning in V1.
 - Do not commit secrets or production connection strings.
+- Every schema change requires a committed EF Core migration.
+- Every implemented feature/change requires automated test coverage.
+
+Manual endpoint testing is a final verification step after automated CI is green.
 
 ---
 
