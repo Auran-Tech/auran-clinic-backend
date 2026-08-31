@@ -8,10 +8,9 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
 {
     public void Configure(EntityTypeBuilder<Permission> builder)
     {
-        builder.HasIndex(x => x.Code).IsUnique();
-        builder.Property(x => x.Code).HasMaxLength(160);
-        builder.Property(x => x.Name).HasMaxLength(200);
-        builder.Property(x => x.Group).HasMaxLength(100);
+        builder.HasIndex(x => x.Key).IsUnique();
+        builder.Property(x => x.Key).HasMaxLength(160).IsRequired();
+        builder.Property(x => x.GroupKey).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Scope)
             .HasConversion<string>()
             .HasMaxLength(32);
