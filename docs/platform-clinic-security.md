@@ -2,157 +2,208 @@
 
 ## Security scopes
 
-AURAN Clinic separates platform administration from clinic operation. The scopes share ASP.NET Core Identity as a credential store but use different domain users, RBAC graphs, JWT claims and authorization policies.
+AURAN Clinic separates platform administration from clinic operation. The scopes share ASP.NET Core Identity only as a credential store; they use different domain users, RBAC graphs, JWT claims, and authorization policies.
 
-```mermaid
-flowchart TD
-    I[ASP.NET Core Identity] -->|AccountType Platform| PU[PlatformUser]
-    I -->|AccountType Clinic| CU[Clinic User]
-    PU --> PR[Platform RBAC]
-    PR --> PA[Platform Admin]
-    PA --> C[Clinic lifecycle]
-    PA --> F[Clinic features]
-    PA --> PLA[Platform audit]
-    CU --> CR[Clinic RBAC]
-    CR --> CS[Clinic Super User]
-    CR --> A[Admin]
-    CR --> R[Receptionist]
-    CR --> D[Doctor]
-    CR --> N[Nurse]
-    CS --> OWN[Own clinic only]
-    A --> OWN
+```text
+Identity(AccountType=Platform)
+  -> PlatformUser
+  -> PlatformRole / PlatformPermission
+
+Identity(AccountType=Clinic)
+  -> User + ClinicId
+  -> Role / ClinicPermission
 ```
 
-The platform scope manages tenants; it does not implicitly enter their clinical scope. A future support-access feature must be explicit, time-bound and audited.
+A Platform Admin does not implicitly enter a clinic's clinical scope. A Clinic Super User bypasses clinic RBAC only inside that user's own active clinic.
+
+## Identity versus business account state
+
+Identity lockout and business account activation are deliberately different concepts.
+
+- Identity lockout protects authentication from repeated invalid-password attempts.
+- `User.IsActive` controls whether a clinic account is enabled for business access.
+- `Clinic.IsActive` controls whether the entire tenant can authenticate or continue using existing sessions.
+
+Disabling a clinic blocks all clinic accounts. Disabling a clinic user revokes that user's refresh sessions and subsequent protected requests are rejected.
 
 ## Platform bootstrap
 
-The first Platform Admin creates a bootstrap problem because no Platform Admin exists yet to create one. The backend therefore supports an idempotent deployment-time bootstrap.
+There is no public Platform Admin registration endpoint.
 
-Bootstrap is disabled by default. When enabled and no `PlatformUser` exists, deployment configuration must provide the initial name, email and password. The service ensures system permission and feature catalogs, creates the protected `PLATFORM_ADMIN` role, maps all platform permissions, creates the Identity account with `AccountType=Platform`, creates the `PlatformUser`, assigns the role and writes a platform audit event.
+The initial Platform Admin is created through disabled-by-default deployment configuration:
 
-There is no public platform registration endpoint. Production values must come from secret/environment configuration.
+```text
+PlatformBootstrap__Enabled
+PlatformBootstrap__FullName
+PlatformBootstrap__Email
+PlatformBootstrap__Password
+PlatformBootstrap__Phone
+```
+
+Bootstrap is idempotent and ensures the global permission/feature catalogs, protected `PLATFORM_ADMIN` role, role permissions, Identity account, `PlatformUser`, assignment, and audit record.
 
 ## Clinic provisioning
 
-Only an authenticated platform actor with `Platform.Clinics.Create` can provision a clinic.
+Only an authenticated platform actor with `Platform_Clinics_Create` can provision a clinic.
 
-```mermaid
-flowchart TD
-    PA[Platform Admin] --> V[Validate request]
-    V --> T[Begin transaction]
-    T --> SC[Ensure system catalogs]
-    SC --> C[Create Clinic]
-    C --> S[Create ClinicSettings]
-    S --> CF[Create default ClinicFeatures]
-    CF --> ROLES[Create protected clinic roles]
-    ROLES --> RP[Assign role permissions]
-    RP --> ID[Create Clinic Identity account]
-    ID --> U[Create domain User]
-    U --> AR[Assign Admin role]
-    AR --> AUD[Write audit]
-    AUD --> COMMIT[Commit]
+Provisioning is transactional:
+
+```text
+validate request
+  -> generate clinic business code
+  -> create Clinic
+  -> create ClinicSettings
+  -> create default ClinicFeatures
+  -> create protected Admin/Receptionist/Doctor/Nurse roles
+  -> map role permissions
+  -> create initial Clinic Identity account
+  -> create domain User (IsActive=true)
+  -> assign Admin role
+  -> audit
+  -> commit
 ```
 
-A provisioning failure rolls back the workflow so partially initialized clinics are not left behind.
+The generated clinic code is immutable. The API receives a `CodePrefix`, not a caller-generated final code.
 
-## Protected roles
+## Permissions
 
-Every clinic starts with Admin, Receptionist, Doctor and Nurse. Their codes are system-defined and clinic-scoped. The same role code can exist in different clinics because uniqueness is `(ClinicId, Code)`.
+Permission identity is stable and language-independent:
 
-Clinic Super User is a property of a clinic user, not a platform privilege. It bypasses clinic permission checks only after the request has been validated as an active clinic actor.
+```text
+Platform_Clinics_Create
+Patient_View
+Users_Manage_Status
+Settings_Manage
+```
+
+Persistence uses:
+
+```text
+Permission
+  Key
+  GroupKey
+  Scope
+
+PermissionTranslation
+  PermissionId
+  LanguageCode
+  Description
+```
+
+English and Arabic are seeded now. Additional languages can be added as translation rows without schema changes.
+
+A Clinic Super User's effective permission list is calculated by the backend as **all clinic-scoped permissions**. The frontend does not invent or bypass permission decisions.
+
+## Protected clinic roles
+
+Every clinic starts with:
+
+- Admin
+- Receptionist
+- Doctor
+- Nurse
+
+Roles are clinic-scoped and unique by `(ClinicId, Code)`. Users may have multiple roles and receive the union of their role permissions.
+
+`Users_Manage_Status` controls administrative activation/deactivation of clinic accounts. A user may disable their own account through the dedicated self-disable operation. Protected Super User restrictions are enforced by the backend service.
+
+## Tenant isolation
+
+Clinic-owned entities inherit `ClinicEntity` and carry `ClinicId`.
+
+The EF Core context enforces the tenant boundary in two directions:
+
+1. Global query filters hide rows belonging to other clinics for authenticated clinic actors.
+2. `SaveChanges` write guards reject attempts to create, modify, or delete clinic-owned rows outside the authenticated `ClinicId`.
+
+Platform/system operations run outside clinic query filtering only through their explicit actor scope.
 
 ## Features
 
-`FeatureDefinition` is a global catalog. `ClinicFeature` maps a feature to a clinic with enabled state and optional configuration.
+`FeatureDefinition` is global. `ClinicFeature` maps feature availability to one clinic.
 
-Initial catalog:
-
-- Patients
-- Dynamic Patient Profile
-- Queue
-- Visits
-- Clinical Orders
-- Follow-ups
-- Reports
-- Advanced Reports
-- AI Features
-
-Feature entitlement is independent from RBAC permission. The authorization sequence for a feature-backed clinic endpoint is:
+Feature entitlement is separate from RBAC permission:
 
 ```text
-valid clinic token -> active clinic -> enabled feature -> required clinic permission -> endpoint
+valid session
+  -> active clinic
+  -> enabled feature (when applicable)
+  -> required permission
+  -> endpoint
 ```
 
-The centralized clinic access service uses `IDistributedCache`. Platform changes invalidate the affected status/feature cache entry so changes take effect without waiting for JWT expiration.
+V1 uses in-process memory caching only. Platform feature/status changes invalidate the relevant memory-cache entries. Redis is not part of the current runtime.
 
-## Clinic suspension
+## Revocable sessions
 
-Clinic login and refresh reject inactive clinics. Authorization also checks clinic active state for protected requests, which prevents an already-issued JWT from remaining usable after suspension.
-
-## Audit model
-
-Audit records can be platform or clinic scoped:
+Access JWTs contain a `session_id` linked to a persisted refresh-token row. Signature/lifetime validation is followed by server-side session validation.
 
 ```text
-AuditLog
-  Scope: Platform | Clinic
-  ClinicId: nullable
-  ActorType: Platform | Clinic | System
-  ActorId: nullable
-  ActorIdentityUserId
-  ActorDisplayName
-  ActorEmail
-  Action
-  Category
-  EntityType / EntityId
-  Description
-  MetadataJson
-  IpAddress / UserAgent / CorrelationId
-  OccurredAtUtc
+login -> S1
+refresh S1 -> revoke S1, issue S2
+logout S2 -> revoke S2
 ```
 
-Actor display information is stored as a snapshot so historical records stay understandable if a user is later renamed or removed.
+An access token tied to a revoked session is rejected immediately even when its JWT `exp` has not elapsed.
 
-Automatic EF Core auditing captures entity create/update/delete changes. Explicit audit events cover authentication, token rotation, authorization denials, provisioning, clinic lifecycle and feature changes.
+Refresh rotation is atomic at the database level so concurrent reuse of the same refresh token cannot create multiple valid replacement sessions.
 
-Audit data is append-only through the API. No update/delete audit endpoints are exposed.
+## Audit
 
-## Audit visibility
+Audit records are append-only and capture scope, clinic (when applicable), actor snapshot, action/category, entity, metadata, network/request context, and timestamp.
 
-A clinic actor can read only `Scope=Clinic` records belonging to its authenticated `ClinicId`.
+Automatic EF auditing covers entity mutations. Explicit audit events cover authentication, refresh/logout, authorization denial, provisioning, tenant status changes, feature changes, file downloads, and similar non-CRUD events.
 
-A platform actor can read platform-scope records and clinic-management records performed by platform actors. Platform audit does not automatically reveal clinic-user clinical activity.
+Platform audit visibility does not automatically expose clinic-user clinical activity.
 
-A platform action against a clinic, for example suspending a clinic or disabling Reports, is stored with `Scope=Clinic`, the target `ClinicId`, and `ActorType=Platform`. This makes the administrative action visible in the clinic history while preserving actor origin.
+## API route convention
 
-## Secret handling
-
-Audit redaction must cover passwords, password hashes, JWT/access tokens, refresh tokens, signing keys, API keys, credentials, connection strings and secrets. Production JWT signing keys and Platform Bootstrap credentials are never committed to source control.
-
-## API boundaries
-
-Platform endpoints use `/api/platform/...`; clinic self-service uses `/api/clinic/...`; existing clinic authentication remains `/api/auth/...`.
-
-Important operation IDs include:
+Implemented routes follow:
 
 ```text
-PlatformAuth_Login
-PlatformAuth_RefreshToken
-PlatformAuth_Logout
-PlatformClinics_Search
-PlatformClinics_GetById
-PlatformClinics_Create
-PlatformClinics_Update
-PlatformClinics_SetStatus
-PlatformClinicFeatures_Get
-PlatformClinicFeatures_Update
-PlatformAuditLogs_Search
-Clinic_GetCurrent
-ClinicSettings_Get
-ClinicSettings_Update
-ClinicFeatures_GetCurrent
-AuditLogs_Search
+/api/{controller-name}/{endpoint-name}
 ```
 
-These operation IDs are stable machine-readable identifiers for future AI tool discovery.
+Examples:
+
+```text
+POST /api/platform-auth/login
+POST /api/platform-auth/refresh
+POST /api/platform-auth/logout
+
+GET  /api/platform-clinics/search
+POST /api/platform-clinics/create
+GET  /api/platform-clinics/get/{id}
+PUT  /api/platform-clinics/update/{id}
+PUT  /api/platform-clinics/set-status/{id}
+GET  /api/platform-clinics/get-features/{id}
+PUT  /api/platform-clinics/update-features/{id}
+
+GET  /api/clinic/get-current
+GET  /api/clinic/get-settings
+PUT  /api/clinic/update-settings
+GET  /api/clinic/get-features
+
+GET  /api/audit-logs/search
+GET  /api/audit-logs/get/{id}
+GET  /api/platform-audit-logs/search
+```
+
+Swagger `OperationId` values remain stable API identifiers and are covered by contract tests.
+
+## Automated security verification
+
+CI applies all migrations to SQL Server and runs automated tests covering:
+
+- Platform bootstrap and clinic provisioning.
+- Clinic login/current-user flow.
+- Multilingual permission catalog.
+- Refresh rotation and replay/session revocation.
+- Logout revocation.
+- Clinic suspension/resume.
+- Clinic Super User effective permissions.
+- Self-disable behavior.
+- Tenant query filtering and cross-clinic write rejection.
+- Concurrency-safe business-code generation.
+
+Manual endpoint testing is intentionally performed only after automated CI is green.
