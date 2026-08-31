@@ -18,6 +18,8 @@ namespace Auran.Clinic.Infrastructure.Authentication;
 public sealed class PlatformAuthService(
     AuranClinicDbContext dbContext,
     UserManager<ApplicationIdentityUser> userManager,
+    SignInManager<ApplicationIdentityUser> signInManager,
+    ICurrentActor currentActor,
     IOptions<JwtOptions> jwtOptions,
     IAuditService auditService) : IPlatformAuthService
 {
@@ -36,17 +38,23 @@ public sealed class PlatformAuthService(
         if (platformUser is null || !platformUser.IsActive)
             return null;
 
-        if (!await userManager.CheckPasswordAsync(identityUser, request.Password))
+        var passwordResult = await signInManager.CheckPasswordSignInAsync(
+            identityUser,
+            request.Password,
+            lockoutOnFailure: true);
+        if (!passwordResult.Succeeded)
         {
             await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.LoginFailed",
-                "Platform login failed because the supplied credentials were invalid.", cancellationToken);
+                passwordResult.IsLockedOut
+                    ? "Platform login was blocked because the Identity account is temporarily locked."
+                    : "Platform login failed because the supplied credentials were invalid.",
+                cancellationToken);
             return null;
         }
 
         var response = await CreateSessionAsync(platformUser, identityUser, cancellationToken);
         await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.LoginSucceeded",
             "Platform user signed in successfully.", cancellationToken);
-
         return response;
     }
 
@@ -57,10 +65,8 @@ public sealed class PlatformAuthService(
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return null;
 
-        var rawRefreshToken = request.RefreshToken.Trim();
-        var tokenHash = HashToken(rawRefreshToken);
+        var tokenHash = HashToken(request.RefreshToken.Trim());
         var now = DateTime.UtcNow;
-
         var refreshToken = await dbContext.PlatformRefreshTokens.AsNoTracking()
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
         if (refreshToken is null || refreshToken.RevokedDate is not null || refreshToken.ExpiresDate <= now)
@@ -72,8 +78,12 @@ public sealed class PlatformAuthService(
             return null;
 
         var identityUser = await userManager.FindByIdAsync(platformUser.IdentityUserId);
-        if (identityUser is null || identityUser.AccountType != AccountType.Platform)
+        if (identityUser is null
+            || identityUser.AccountType != AccountType.Platform
+            || await userManager.IsLockedOutAsync(identityUser))
+        {
             return null;
+        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -83,19 +93,13 @@ public sealed class PlatformAuthService(
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(x => x.RevokedDate, now),
                     cancellationToken);
-
             if (revokedRows != 1)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return null;
             }
 
-            var response = await CreateSessionAsync(
-                platformUser,
-                identityUser,
-                cancellationToken,
-                saveChanges: false);
-
+            var response = await CreateSessionAsync(platformUser, identityUser, cancellationToken, false);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             var replacementHash = HashToken(response.RefreshToken);
@@ -104,12 +108,10 @@ public sealed class PlatformAuthService(
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(x => x.ReplacedByTokenHash, replacementHash),
                     cancellationToken);
-
             await transaction.CommitAsync(cancellationToken);
 
             await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.TokenRefreshed",
                 "Platform access and refresh tokens were rotated successfully.", cancellationToken);
-
             return response;
         }
         catch
@@ -121,15 +123,22 @@ public sealed class PlatformAuthService(
 
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(refreshToken))
+        if (string.IsNullOrWhiteSpace(refreshToken)
+            || currentActor.ActorType != ActorType.Platform
+            || currentActor.PlatformUserId is not Guid currentPlatformUserId)
+        {
             return;
+        }
 
         var tokenHash = HashToken(refreshToken.Trim());
         var entity = await dbContext.PlatformRefreshTokens
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-
-        if (entity is null || entity.RevokedDate is not null)
+        if (entity is null
+            || entity.RevokedDate is not null
+            || entity.PlatformUserId != currentPlatformUserId)
+        {
             return;
+        }
 
         entity.RevokedDate = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -140,11 +149,11 @@ public sealed class PlatformAuthService(
             return;
 
         var identityUser = await userManager.FindByIdAsync(platformUser.IdentityUserId);
-        if (identityUser is null)
-            return;
-
-        await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.Logout",
-            "Platform authentication session was revoked during logout.", cancellationToken);
+        if (identityUser is not null)
+        {
+            await WriteAuditAsync(platformUser, identityUser, "PlatformAuthentication.Logout",
+                "Platform authentication session was revoked during logout.", cancellationToken);
+        }
     }
 
     private async Task<PlatformAuthResponse> CreateSessionAsync(
@@ -157,20 +166,20 @@ public sealed class PlatformAuthService(
             .Where(x => x.PlatformUserId == platformUser.Id)
             .Select(x => x.PlatformRoleId)
             .ToListAsync(cancellationToken);
-
         var roles = await dbContext.PlatformRoles.AsNoTracking()
             .Where(x => roleIds.Contains(x.Id))
             .Select(x => x.Code)
             .Distinct()
+            .OrderBy(x => x)
             .ToListAsync(cancellationToken);
-
         var permissions = await (from rolePermission in dbContext.PlatformRolePermissions.AsNoTracking()
                                  join permission in dbContext.Permissions.AsNoTracking()
                                      on rolePermission.PermissionId equals permission.Id
                                  where roleIds.Contains(rolePermission.PlatformRoleId)
                                        && permission.Scope == PermissionScope.Platform
-                                 select permission.Code)
+                                 select permission.Key)
             .Distinct()
+            .OrderBy(x => x)
             .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
@@ -187,7 +196,6 @@ public sealed class PlatformAuthService(
             ExpiresDate = now.AddDays(_jwt.RefreshTokenDays),
             CreatedDate = now
         });
-
         if (saveChanges)
             await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -226,7 +234,6 @@ public sealed class PlatformAuthService(
             new(ClaimTypes.Email, identityUser.Email ?? platformUser.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
-
         claims.AddRange(roles.Select(role => new Claim("platform_role", role)));
         claims.AddRange(permissions.Select(permission => new Claim("platform_permission", permission)));
 
@@ -238,7 +245,6 @@ public sealed class PlatformAuthService(
             claims,
             expires: expiresDate,
             signingCredentials: credentials);
-
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
