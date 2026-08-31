@@ -23,6 +23,7 @@ jobs:
 
     env:
       ConnectionStrings__DefaultConnection: Server=localhost,1433;Database=AuranClinicCi;User Id=sa;Password=Auran_CI_Password_123!;TrustServerCertificate=True;Encrypt=False
+      Jwt__SigningKey: Auran_CI_Only_JWT_Signing_Key_Not_A_Secret_2026
 
     steps:
       - name: Checkout

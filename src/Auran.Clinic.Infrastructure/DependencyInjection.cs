@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Auran.Clinic.Infrastructure;
@@ -37,9 +38,24 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AuranClinicDbContext>()
         .AddSignInManager();
 
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
-        var jwt = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+        var jwtSection = configuration.GetRequiredSection(JwtOptions.SectionName);
+        var jwt = jwtSection.Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is required.");
+
+        var jwtValidator = new JwtOptionsValidator();
+        var jwtValidation = jwtValidator.Validate(Options.DefaultName, jwt);
+        if (jwtValidation.Failed)
+        {
+            throw new OptionsValidationException(
+                Options.DefaultName,
+                typeof(JwtOptions),
+                jwtValidation.Failures);
+        }
+
+        services.AddSingleton<IValidateOptions<JwtOptions>>(jwtValidator);
+        services.AddOptions<JwtOptions>()
+            .Bind(jwtSection)
+            .ValidateOnStart();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
