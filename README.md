@@ -166,7 +166,7 @@ Swagger is available in Development mode after the API starts.
 
 ## Docker Development Stack
 
-The repository contains a multi-stage `Dockerfile` plus `docker-compose.yml` for API, SQL Server, and Redis.
+The repository contains a multi-stage `Dockerfile` plus `docker-compose.yml` for the API and SQL Server.
 
 ```bash
 cp .env.example .env
