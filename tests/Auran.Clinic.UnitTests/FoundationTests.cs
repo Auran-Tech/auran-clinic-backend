@@ -8,11 +8,11 @@ namespace Auran.Clinic.UnitTests;
 public class FoundationTests
 {
     [Fact]
-    public void PermissionCatalog_HasUniqueCodesAndExplicitScopes()
+    public void PermissionCatalog_HasUniqueKeysAndExplicitScopes()
     {
         var permissions = SystemPermissionCatalog.All.ToList();
 
-        Assert.Equal(permissions.Count, permissions.Select(x => x.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(permissions.Count, permissions.Select(x => x.Key).Distinct(StringComparer.Ordinal).Count());
         Assert.All(permissions, permission => Assert.True(Enum.IsDefined(permission.Scope)));
         Assert.Contains(permissions, x => x.Scope == PermissionScope.Platform);
         Assert.Contains(permissions, x => x.Scope == PermissionScope.Clinic);
@@ -21,7 +21,7 @@ public class FoundationTests
     [Fact]
     public void ClinicSystemRoles_ReferenceOnlyClinicPermissions()
     {
-        var clinicPermissions = SystemPermissionCatalog.Clinic.Select(x => x.Code).ToHashSet(StringComparer.Ordinal);
+        var clinicPermissions = SystemPermissionCatalog.Clinic.Select(x => x.Key).ToHashSet(StringComparer.Ordinal);
 
         Assert.All(
             SystemRoleCatalog.All.SelectMany(x => x.Permissions),
@@ -31,7 +31,7 @@ public class FoundationTests
     [Fact]
     public void PlatformAdmin_ReferencesOnlyPlatformPermissions()
     {
-        var platformPermissions = SystemPermissionCatalog.Platform.Select(x => x.Code).ToHashSet(StringComparer.Ordinal);
+        var platformPermissions = SystemPermissionCatalog.Platform.Select(x => x.Key).ToHashSet(StringComparer.Ordinal);
         var admin = Assert.Single(PlatformRoleCatalog.All);
 
         Assert.Equal(PlatformRoleCatalog.PlatformAdmin, admin.Code);
