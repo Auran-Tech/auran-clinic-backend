@@ -16,7 +16,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Authorize(Policy = ActorPolicies.Clinic)]
 public sealed class ClinicController(IClinicService clinicService) : ControllerBase
 {
-    [HttpGet]
+    [HttpGet("current")]
     [SwaggerOperation(Summary = "Get current clinic", Description = "Returns the authenticated clinic's own tenant identity and configuration. The clinic is resolved from the JWT and cannot be selected using a route or query parameter.", OperationId = "Clinic_GetCurrent", Tags = new[] { "Clinic" })]
     public async Task<ActionResult<BaseResponse<ClinicDetailsResponse>>> GetCurrent(CancellationToken cancellationToken)
     {
