@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-test:
@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -36,14 +38,29 @@ jobs:
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
       - name: Generate foundation hardening migration
-        run: dotnet ef migrations add FoundationHardening --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj --output-dir Persistence/Migrations
+        shell: bash
+        run: |
+          if compgen -G "src/Auran.Clinic.Infrastructure/Persistence/Migrations/*_FoundationHardening.cs" > /dev/null; then
+            echo "FoundationHardening migration already exists."
+          else
+            dotnet ef migrations add FoundationHardening \
+              --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+              --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
+              --output-dir Persistence/Migrations
+          fi
 
-      - name: Upload generated migrations
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-foundation-hardening-migration
-          path: src/Auran.Clinic.Infrastructure/Persistence/Migrations
-          if-no-files-found: error
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
+          if git diff --cached --quiet; then
+            echo "No migration changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "db: add foundation hardening migration"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
 
       - name: Test
         run: dotnet test Auran.Clinic.sln --configuration Release --no-build --verbosity normal
