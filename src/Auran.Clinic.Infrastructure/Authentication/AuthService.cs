@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Auran.Clinic.Application.Authentication;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ namespace Auran.Clinic.Infrastructure.Authentication;
 public sealed class AuthService(
     AuranClinicDbContext dbContext,
     UserManager<ApplicationIdentityUser> userManager,
+    IEffectivePermissionService effectivePermissionService,
     IOptions<JwtOptions> jwtOptions) : IAuthService
 {
     private readonly JwtOptions _jwt = jwtOptions.Value;
@@ -82,14 +84,10 @@ public sealed class AuthService(
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var permissions = user.IsSuperUser
-            ? new List<string>()
-            : await (from rolePermission in dbContext.RolePermissions.AsNoTracking()
-                     join permission in dbContext.Permissions.AsNoTracking() on rolePermission.PermissionId equals permission.Id
-                     where roleIds.Contains(rolePermission.RoleId)
-                     select permission.Code)
-                .Distinct()
-                .ToListAsync(cancellationToken);
+        var permissions = await effectivePermissionService.GetAsync(
+            user.IsSuperUser,
+            roleIds,
+            cancellationToken);
 
         var expiresDate = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
         var accessToken = CreateAccessToken(user, identityUser, roles, permissions, expiresDate);
