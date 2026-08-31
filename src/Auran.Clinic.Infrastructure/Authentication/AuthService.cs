@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Domain.Entities;
@@ -19,6 +20,7 @@ public sealed class AuthService(
     UserManager<ApplicationIdentityUser> userManager,
     SignInManager<ApplicationIdentityUser> signInManager,
     IEffectivePermissionService effectivePermissionService,
+    ICurrentUserContext currentUserContext,
     IOptions<JwtOptions> jwtOptions) : IAuthService
 {
     private readonly JwtOptions _jwt = jwtOptions.Value;
@@ -47,13 +49,28 @@ public sealed class AuthService(
     public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
         var tokenHash = HashToken(request.RefreshToken);
+        var now = DateTime.UtcNow;
         var refreshToken = await dbContext.RefreshTokens
-            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+            .AsNoTracking()
+            .Where(token =>
+                token.TokenHash == tokenHash &&
+                token.RevokedDate == null &&
+                token.ExpiresDate > now)
+            .Select(token => new
+            {
+                token.Id,
+                token.UserId,
+                token.ClinicId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (refreshToken is null || !refreshToken.IsActive)
+        if (refreshToken is null)
             return null;
 
-        var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId, cancellationToken);
+        var user = await dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
+                cancellationToken);
         if (user is null)
             return null;
 
@@ -61,22 +78,61 @@ public sealed class AuthService(
         if (identityUser is null)
             return null;
 
-        refreshToken.RevokedDate = DateTime.UtcNow;
-        var response = await CreateSessionAsync(user, identityUser, cancellationToken, saveChanges: false);
-        refreshToken.ReplacedByTokenHash = HashToken(response.RefreshToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var revokedCount = await dbContext.RefreshTokens
+            .Where(token =>
+                token.Id == refreshToken.Id &&
+                token.RevokedDate == null &&
+                token.ExpiresDate > now)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(token => token.RevokedDate, now),
+                cancellationToken);
+
+        if (revokedCount != 1)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        var response = await CreateSessionAsync(
+            user,
+            identityUser,
+            cancellationToken,
+            saveChanges: false);
+        var replacementTokenHash = HashToken(response.RefreshToken);
+
+        await dbContext.RefreshTokens
+            .Where(token => token.Id == refreshToken.Id)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(token => token.ReplacedByTokenHash, replacementTokenHash),
+                cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return response;
     }
 
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        var tokenHash = HashToken(refreshToken);
-        var entity = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-        if (entity is null || entity.RevokedDate is not null)
+        if (!currentUserContext.IsAuthenticated ||
+            currentUserContext.UserId is not Guid userId ||
+            currentUserContext.ClinicId is not Guid clinicId)
+        {
             return;
+        }
 
-        entity.RevokedDate = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var tokenHash = HashToken(refreshToken);
+        var now = DateTime.UtcNow;
+        await dbContext.RefreshTokens
+            .Where(token =>
+                token.TokenHash == tokenHash &&
+                token.UserId == userId &&
+                token.ClinicId == clinicId &&
+                token.RevokedDate == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(token => token.RevokedDate, now),
+                cancellationToken);
     }
 
     private async Task<AuthResponse> CreateSessionAsync(User user, ApplicationIdentityUser identityUser, CancellationToken cancellationToken, bool saveChanges = true)
