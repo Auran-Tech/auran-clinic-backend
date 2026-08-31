@@ -15,7 +15,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.AuditLogs.View)]
 public sealed class AuditLogsController(IAuditService auditService) : ControllerBase
 {
-    [HttpGet]
+    [HttpGet("search")]
     [SwaggerOperation(Summary = "Search current clinic audit logs", Description = "Returns append-only audit history for the authenticated clinic only. Changing ClinicId in the query cannot expand tenant visibility.", OperationId = "AuditLogs_Search", Tags = new[] { "Audit" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BaseResponse<PaginatedResponse<AuditLogResponse>>>> Search(
@@ -29,7 +29,7 @@ public sealed class AuditLogsController(IAuditService auditService) : Controller
         });
     }
 
-    [HttpGet("{id:guid}")]
+    [HttpGet("get/{id:guid}")]
     [SwaggerOperation(Summary = "Get current clinic audit entry", Description = "Returns one immutable audit record when it belongs to the authenticated clinic.", OperationId = "AuditLogs_GetById", Tags = new[] { "Audit" })]
     public async Task<ActionResult<BaseResponse<AuditLogResponse>>> GetById(Guid id, CancellationToken cancellationToken)
     {
