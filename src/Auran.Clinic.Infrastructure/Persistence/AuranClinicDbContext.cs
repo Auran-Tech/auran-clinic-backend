@@ -24,6 +24,7 @@ public class AuranClinicDbContext(
     public new DbSet<User> Users => Set<User>();
     public new DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<PermissionTranslation> PermissionTranslations => Set<PermissionTranslation>();
     public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
