@@ -10,7 +10,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Route("api/platform/auth")]
+[Route("api/platform-auth")]
 [Produces("application/json")]
 public sealed class PlatformAuthController(IPlatformAuthService authService) : ControllerBase
 {
