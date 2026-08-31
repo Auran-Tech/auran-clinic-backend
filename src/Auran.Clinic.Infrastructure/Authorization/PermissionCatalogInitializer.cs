@@ -23,13 +23,13 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
 
         var relevantPermissionIds = permissions.Select(permission => permission.Id).ToArray();
         var rolePermissions = relevantPermissionIds.Length == 0
-            ? []
+            ? new List<RolePermission>()
             : await dbContext.RolePermissions
                 .Where(rolePermission => relevantPermissionIds.Contains(rolePermission.PermissionId))
                 .ToListAsync(cancellationToken);
 
         var translations = relevantPermissionIds.Length == 0
-            ? []
+            ? new List<PermissionTranslation>()
             : await dbContext.PermissionTranslations
                 .Where(translation => relevantPermissionIds.Contains(translation.PermissionId))
                 .ToListAsync(cancellationToken);
@@ -114,7 +114,10 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
         {
             var existing = translations.SingleOrDefault(translation =>
                 translation.PermissionId == current.Id &&
-                translation.LanguageCode == legacyTranslation.LanguageCode);
+                string.Equals(
+                    translation.LanguageCode,
+                    legacyTranslation.LanguageCode,
+                    StringComparison.OrdinalIgnoreCase));
 
             if (existing is null)
             {
@@ -138,7 +141,7 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
     {
         var translation = translations.SingleOrDefault(item =>
             item.PermissionId == permission.Id &&
-            item.LanguageCode == languageCode);
+            string.Equals(item.LanguageCode, languageCode, StringComparison.OrdinalIgnoreCase));
 
         if (translation is null)
         {
@@ -155,10 +158,20 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
             return;
         }
 
-        if (translation.Description == description)
-            return;
+        var changed = false;
+        if (translation.LanguageCode != languageCode)
+        {
+            translation.LanguageCode = languageCode;
+            changed = true;
+        }
 
-        translation.Description = description;
-        translation.UpdatedDate = now;
+        if (translation.Description != description)
+        {
+            translation.Description = description;
+            changed = true;
+        }
+
+        if (changed)
+            translation.UpdatedDate = now;
     }
 }
