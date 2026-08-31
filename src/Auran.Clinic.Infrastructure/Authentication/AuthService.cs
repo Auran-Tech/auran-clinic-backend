@@ -40,7 +40,7 @@ public sealed class AuthService(
 
         var user = await dbContext.Users.AsNoTracking()
             .SingleOrDefaultAsync(x => x.IdentityUserId == identityUser.Id, cancellationToken);
-        if (user is null)
+        if (user is null || !await CanAuthenticateAsync(user, cancellationToken))
             return null;
 
         return await CreateSessionAsync(user, identityUser, cancellationToken);
@@ -71,7 +71,7 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(
                 x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
                 cancellationToken);
-        if (user is null)
+        if (user is null || !await CanAuthenticateAsync(user, cancellationToken))
             return null;
 
         var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
@@ -133,6 +133,15 @@ public sealed class AuthService(
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(token => token.RevokedDate, now),
                 cancellationToken);
+    }
+
+    private async Task<bool> CanAuthenticateAsync(User user, CancellationToken cancellationToken)
+    {
+        if (!user.IsActive)
+            return false;
+
+        return await dbContext.Clinics.AsNoTracking()
+            .AnyAsync(clinic => clinic.Id == user.ClinicId && clinic.IsActive, cancellationToken);
     }
 
     private async Task<AuthResponse> CreateSessionAsync(User user, ApplicationIdentityUser identityUser, CancellationToken cancellationToken, bool saveChanges = true)
