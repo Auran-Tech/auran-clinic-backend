@@ -13,9 +13,9 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal("Auth_Login", GetOperationId(paths, "/api/auth/login", "post"));
         Assert.Equal("Auth_RefreshToken", GetOperationId(paths, "/api/auth/refresh", "post"));
         Assert.Equal("Auth_Logout", GetOperationId(paths, "/api/auth/logout", "post"));
-        Assert.Equal("PlatformAuth_Login", GetOperationId(paths, "/api/platform/auth/login", "post"));
-        Assert.Equal("PlatformAuth_RefreshToken", GetOperationId(paths, "/api/platform/auth/refresh", "post"));
-        Assert.Equal("PlatformAuth_Logout", GetOperationId(paths, "/api/platform/auth/logout", "post"));
+        Assert.Equal("PlatformAuth_Login", GetOperationId(paths, "/api/platform-auth/login", "post"));
+        Assert.Equal("PlatformAuth_RefreshToken", GetOperationId(paths, "/api/platform-auth/refresh", "post"));
+        Assert.Equal("PlatformAuth_Logout", GetOperationId(paths, "/api/platform-auth/logout", "post"));
     }
 
     [Fact]
@@ -28,8 +28,8 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         Assert.True(document.GetProperty("security").GetArrayLength() > 0);
         AssertAnonymous(GetOperation(paths, "/api/auth/login", "post"));
         AssertAnonymous(GetOperation(paths, "/api/auth/refresh", "post"));
-        AssertAnonymous(GetOperation(paths, "/api/platform/auth/login", "post"));
-        AssertAnonymous(GetOperation(paths, "/api/platform/auth/refresh", "post"));
+        AssertAnonymous(GetOperation(paths, "/api/platform-auth/login", "post"));
+        AssertAnonymous(GetOperation(paths, "/api/platform-auth/refresh", "post"));
     }
 
     [Fact]
@@ -38,16 +38,16 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         using var client = factory.CreateClient();
         var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
-        Assert.Equal("PlatformClinics_Search", GetOperationId(paths, "/api/platform/clinics", "get"));
-        Assert.Equal("PlatformClinics_Create", GetOperationId(paths, "/api/platform/clinics", "post"));
-        Assert.Equal("PlatformClinics_GetById", GetOperationId(paths, "/api/platform/clinics/{id}", "get"));
-        Assert.Equal("PlatformClinics_Update", GetOperationId(paths, "/api/platform/clinics/{id}", "put"));
-        Assert.Equal("PlatformClinics_SetStatus", GetOperationId(paths, "/api/platform/clinics/{id}/status", "put"));
-        Assert.Equal("PlatformClinicFeatures_Get", GetOperationId(paths, "/api/platform/clinics/{id}/features", "get"));
-        Assert.Equal("PlatformClinicFeatures_Update", GetOperationId(paths, "/api/platform/clinics/{id}/features", "put"));
-        Assert.Equal("PlatformClinicBranding_CreateUploadSession", GetOperationId(paths, "/api/platform/clinics/{id}/branding/upload-sessions", "post"));
-        Assert.Equal("PlatformClinicBranding_CompleteUploadSession", GetOperationId(paths, "/api/platform/clinics/{id}/branding/upload-sessions/{sessionId}/complete", "post"));
-        Assert.Equal("PlatformAuditLogs_Search", GetOperationId(paths, "/api/platform/audit-logs", "get"));
+        Assert.Equal("PlatformClinics_Search", GetOperationId(paths, "/api/platform-clinics/search", "get"));
+        Assert.Equal("PlatformClinics_Create", GetOperationId(paths, "/api/platform-clinics/create", "post"));
+        Assert.Equal("PlatformClinics_GetById", GetOperationId(paths, "/api/platform-clinics/get/{id}", "get"));
+        Assert.Equal("PlatformClinics_Update", GetOperationId(paths, "/api/platform-clinics/update/{id}", "put"));
+        Assert.Equal("PlatformClinics_SetStatus", GetOperationId(paths, "/api/platform-clinics/set-status/{id}", "put"));
+        Assert.Equal("PlatformClinicFeatures_Get", GetOperationId(paths, "/api/platform-clinics/get-features/{id}", "get"));
+        Assert.Equal("PlatformClinicFeatures_Update", GetOperationId(paths, "/api/platform-clinics/update-features/{id}", "put"));
+        Assert.Equal("PlatformClinicBranding_CreateUploadSession", GetOperationId(paths, "/api/platform-clinics/create-branding-upload-session/{id}", "post"));
+        Assert.Equal("PlatformClinicBranding_CompleteUploadSession", GetOperationId(paths, "/api/platform-clinics/complete-branding-upload-session/{id}/{sessionId}", "post"));
+        Assert.Equal("PlatformAuditLogs_Search", GetOperationId(paths, "/api/platform-audit-logs/search", "get"));
     }
 
     [Fact]
@@ -56,11 +56,14 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         using var client = factory.CreateClient();
         var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
-        Assert.Equal("Clinic_GetCurrent", GetOperationId(paths, "/api/clinic", "get"));
+        Assert.Equal("Clinic_GetCurrent", GetOperationId(paths, "/api/clinic/current", "get"));
         Assert.Equal("ClinicSettings_Get", GetOperationId(paths, "/api/clinic/settings", "get"));
         Assert.Equal("ClinicSettings_Update", GetOperationId(paths, "/api/clinic/settings", "put"));
         Assert.Equal("ClinicFeatures_GetCurrent", GetOperationId(paths, "/api/clinic/features", "get"));
-        Assert.Equal("AuditLogs_Search", GetOperationId(paths, "/api/audit-logs", "get"));
+        Assert.Equal("AuditLogs_Search", GetOperationId(paths, "/api/audit-logs/search", "get"));
+        Assert.Equal("Permissions_List", GetOperationId(paths, "/api/permissions/list", "get"));
+        Assert.Equal("Users_UpdateStatus", GetOperationId(paths, "/api/users/status", "put"));
+        Assert.Equal("Users_DisableSelf", GetOperationId(paths, "/api/users/disable-self", "post"));
     }
 
     [Fact]
@@ -69,14 +72,14 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         using var client = factory.CreateClient();
         var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
-        Assert.Equal("Reference_Fonts", GetOperationId(paths, "/api/reference/fonts", "get"));
-        Assert.Equal("Reference_Countries", GetOperationId(paths, "/api/reference/countries", "get"));
-        Assert.Equal("Reference_Cities", GetOperationId(paths, "/api/reference/countries/{countryCode}/cities", "get"));
-        Assert.Equal("Reference_Locales", GetOperationId(paths, "/api/reference/locales", "get"));
-        Assert.Equal("Reference_DateFormats", GetOperationId(paths, "/api/reference/date-formats", "get"));
-        Assert.Equal("Reference_TimeFormats", GetOperationId(paths, "/api/reference/time-formats", "get"));
-        Assert.Equal("Reference_TimeZones", GetOperationId(paths, "/api/reference/time-zones", "get"));
-        AssertAnonymous(GetOperation(paths, "/api/reference/fonts", "get"));
+        Assert.Equal("Reference_Fonts", GetOperationId(paths, "/api/reference-data/fonts", "get"));
+        Assert.Equal("Reference_Countries", GetOperationId(paths, "/api/reference-data/countries", "get"));
+        Assert.Equal("Reference_Cities", GetOperationId(paths, "/api/reference-data/cities/{countryCode}", "get"));
+        Assert.Equal("Reference_Locales", GetOperationId(paths, "/api/reference-data/locales", "get"));
+        Assert.Equal("Reference_DateFormats", GetOperationId(paths, "/api/reference-data/date-formats", "get"));
+        Assert.Equal("Reference_TimeFormats", GetOperationId(paths, "/api/reference-data/time-formats", "get"));
+        Assert.Equal("Reference_TimeZones", GetOperationId(paths, "/api/reference-data/time-zones", "get"));
+        AssertAnonymous(GetOperation(paths, "/api/reference-data/fonts", "get"));
     }
 
     [Fact]
@@ -85,12 +88,12 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         using var client = factory.CreateClient();
         var paths = (await GetDocumentAsync(client)).GetProperty("paths");
 
-        Assert.Equal("Files_CreateUploadSession", GetOperationId(paths, "/api/files/upload-sessions", "post"));
-        Assert.Equal("Files_UploadContent", GetOperationId(paths, "/api/files/upload-sessions/{id}/content", "put"));
-        Assert.Equal("Files_CompleteUploadSession", GetOperationId(paths, "/api/files/upload-sessions/{id}/complete", "post"));
-        Assert.Equal("Files_Get", GetOperationId(paths, "/api/files/{id}", "get"));
-        Assert.Equal("Files_Download", GetOperationId(paths, "/api/files/{id}/content", "get"));
-        AssertAnonymous(GetOperation(paths, "/api/files/upload-sessions/{id}/content", "put"));
+        Assert.Equal("Files_CreateUploadSession", GetOperationId(paths, "/api/files/create-upload-session", "post"));
+        Assert.Equal("Files_UploadContent", GetOperationId(paths, "/api/files/upload-content/{id}", "put"));
+        Assert.Equal("Files_CompleteUploadSession", GetOperationId(paths, "/api/files/complete-upload-session/{id}", "post"));
+        Assert.Equal("Files_Get", GetOperationId(paths, "/api/files/get/{id}", "get"));
+        Assert.Equal("Files_Download", GetOperationId(paths, "/api/files/download/{id}", "get"));
+        AssertAnonymous(GetOperation(paths, "/api/files/upload-content/{id}", "put"));
     }
 
     [Fact]
@@ -98,7 +101,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     {
         using var client = factory.CreateClient();
         var paths = (await GetDocumentAsync(client)).GetProperty("paths");
-        var operation = GetOperation(paths, "/api/platform/clinics", "post");
+        var operation = GetOperation(paths, "/api/platform-clinics/create", "post");
         var responses = operation.GetProperty("responses");
 
         Assert.True(responses.TryGetProperty("401", out var unauthorized));
@@ -111,7 +114,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
     public async Task ProtectedEndpoint_ReturnsStructuredUnauthorizedResponse()
     {
         using var client = factory.CreateClient();
-        var response = await client.GetAsync("/api/platform/clinics");
+        var response = await client.GetAsync("/api/platform-clinics/search");
 
         Assert.Equal(401, (int)response.StatusCode);
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
