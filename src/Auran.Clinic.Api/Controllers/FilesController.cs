@@ -34,6 +34,7 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
             if (result is null)
                 return Forbid();
 
+            SetCanonicalUploadUrl(result);
             return StatusCode(StatusCodes.Status201Created, new BaseResponse<FileUploadSessionResponse>
             {
                 Status = true,
@@ -97,14 +98,16 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
         try
         {
             var result = await fileService.CompleteUploadAsync(id, cancellationToken);
-            return result is null
-                ? NotFound(new BaseResponse { Status = false, Message = "Upload session was not found." })
-                : Ok(new BaseResponse<FileResponse>
-                {
-                    Status = true,
-                    Message = "File upload completed.",
-                    Data = result
-                });
+            if (result is null)
+                return NotFound(new BaseResponse { Status = false, Message = "Upload session was not found." });
+
+            SetCanonicalFileUrl(result);
+            return Ok(new BaseResponse<FileResponse>
+            {
+                Status = true,
+                Message = "File upload completed.",
+                Data = result
+            });
         }
         catch (InvalidOperationException ex)
         {
@@ -122,9 +125,11 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
     public async Task<ActionResult<BaseResponse<FileResponse>>> Get(Guid id, CancellationToken cancellationToken)
     {
         var result = await fileService.GetAsync(id, cancellationToken);
-        return result is null
-            ? NotFound(new BaseResponse { Status = false, Message = "File was not found." })
-            : Ok(new BaseResponse<FileResponse> { Status = true, Data = result });
+        if (result is null)
+            return NotFound(new BaseResponse { Status = false, Message = "File was not found." });
+
+        SetCanonicalFileUrl(result);
+        return Ok(new BaseResponse<FileResponse> { Status = true, Data = result });
     }
 
     [HttpGet("download/{id:guid}")]
@@ -141,4 +146,13 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
             ? NotFound(new BaseResponse { Status = false, Message = "File was not found." })
             : File(result.Content, result.ContentType, result.FileName, enableRangeProcessing: true);
     }
+
+    private void SetCanonicalUploadUrl(FileUploadSessionResponse response)
+    {
+        var token = Uri.EscapeDataString(response.UploadToken ?? string.Empty);
+        response.UploadUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/files/upload-content/{response.SessionId}?token={token}";
+    }
+
+    private void SetCanonicalFileUrl(FileResponse response) =>
+        response.Url = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/files/download/{response.Id}";
 }
