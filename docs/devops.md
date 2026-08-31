@@ -21,7 +21,6 @@ GitHub Actions runs on pull requests and pushes to `main`:
 
 - API
 - SQL Server 2022
-- Redis 7
 
 Copy `.env.example` to `.env` and set a strong local SQL Server password before running:
 
@@ -29,4 +28,4 @@ Copy `.env.example` to `.env` and set a strong local SQL Server password before 
 docker compose up --build
 ```
 
-Do not commit production secrets. Production connection strings, Redis credentials, JWT keys, and other secrets must be provided by the deployment platform/environment.
+Do not commit production secrets. Production connection strings, JWT keys, and other secrets must be provided by the deployment platform/environment.
