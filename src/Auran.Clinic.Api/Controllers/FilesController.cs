@@ -15,7 +15,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Authorize(Policy = ActorPolicies.Clinic)]
 public sealed class FilesController(IFileService fileService) : ControllerBase
 {
-    [HttpPost("upload-sessions")]
+    [HttpPost("create-upload-session")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Files.Upload)]
     [SwaggerOperation(
         Summary = "Create a temporary file upload session",
@@ -47,7 +47,7 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
         }
     }
 
-    [HttpPut("upload-sessions/{id:guid}/content")]
+    [HttpPut("upload-content/{id:guid}")]
     [AllowAnonymous]
     [RequestSizeLimit(104_857_600)]
     [SwaggerOperation(
@@ -80,7 +80,7 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
             });
     }
 
-    [HttpPost("upload-sessions/{id:guid}/complete")]
+    [HttpPost("complete-upload-session/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Files.Upload)]
     [SwaggerOperation(
         Summary = "Complete a file upload session",
@@ -112,7 +112,7 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
         }
     }
 
-    [HttpGet("{id:guid}")]
+    [HttpGet("get/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Files.View)]
     [SwaggerOperation(
         Summary = "Get file metadata",
@@ -127,7 +127,7 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
             : Ok(new BaseResponse<FileResponse> { Status = true, Data = result });
     }
 
-    [HttpGet("{id:guid}/content")]
+    [HttpGet("download/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Files.View)]
     [SwaggerOperation(
         Summary = "Download file content",
