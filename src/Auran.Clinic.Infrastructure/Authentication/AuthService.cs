@@ -265,7 +265,7 @@ public sealed class AuthService(
         {
             return await dbContext.Permissions.AsNoTracking()
                 .Where(x => x.Scope == PermissionScope.Clinic)
-                .Select(x => x.Code)
+                .Select(x => x.Key)
                 .Distinct()
                 .OrderBy(x => x)
                 .ToListAsync(cancellationToken);
@@ -277,7 +277,7 @@ public sealed class AuthService(
                       where rolePermission.ClinicId == user.ClinicId
                             && roleIds.Contains(rolePermission.RoleId)
                             && permission.Scope == PermissionScope.Clinic
-                      select permission.Code)
+                      select permission.Key)
             .Distinct()
             .OrderBy(x => x)
             .ToListAsync(cancellationToken);
