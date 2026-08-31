@@ -12,7 +12,7 @@ namespace Auran.Clinic.Api.Controllers;
 [Produces("application/json")]
 public sealed class UsersController(IUserAccountService userAccountService) : ControllerBase
 {
-    [Authorize(Policy = PermissionPolicy.ForClinic(Permissions.Clinic.Users.ManageStatus))]
+    [Authorize(Policy = PermissionPolicy.ClinicPrefix + Permissions.Clinic.Users.ManageStatus)]
     [HttpPut("status")]
     [SwaggerOperation(
         Summary = "Enable or disable a clinic user account",
