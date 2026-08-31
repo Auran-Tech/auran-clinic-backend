@@ -10,4 +10,13 @@ public class HealthCheckTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         response.EnsureSuccessStatusCode();
     }
+
+    [Fact]
+    public async Task ReadyHealthCheck_ShouldReturnSuccessWhenDatabaseIsReachable()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/health/ready");
+
+        response.EnsureSuccessStatusCode();
+    }
 }
