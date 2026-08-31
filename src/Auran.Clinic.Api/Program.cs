@@ -1,5 +1,8 @@
+using Auran.Clinic.Api.HealthChecks;
+using Auran.Clinic.Api.Infrastructure;
 using Auran.Clinic.Application;
 using Auran.Clinic.Infrastructure;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -41,11 +44,17 @@ builder.Services.AddSwaggerGen(options =>
         }] = Array.Empty<string>()
     });
 });
-builder.Services.AddHealthChecks();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<DatabaseReadinessHealthCheck>("database", tags: ["ready"]);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Keep the machine-readable OpenAPI document available in every environment so
 // automated clients can discover the API contract. The interactive UI remains development-only.
@@ -60,7 +69,14 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
 app.Run();
 
 public partial class Program;
