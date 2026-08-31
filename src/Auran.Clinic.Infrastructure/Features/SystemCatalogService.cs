@@ -15,8 +15,8 @@ public sealed class SystemCatalogService(AuranClinicDbContext dbContext)
     {
         var keys = SystemPermissionCatalog.All.Select(x => x.Key).ToArray();
         var existing = await dbContext.Permissions
-            .Where(x => keys.Contains(x.Code))
-            .ToDictionaryAsync(x => x.Code, StringComparer.Ordinal, cancellationToken);
+            .Where(x => keys.Contains(x.Key))
+            .ToDictionaryAsync(x => x.Key, StringComparer.Ordinal, cancellationToken);
 
         foreach (var definition in SystemPermissionCatalog.All)
         {
@@ -25,9 +25,8 @@ public sealed class SystemCatalogService(AuranClinicDbContext dbContext)
                 permission = new Permission
                 {
                     Id = Guid.NewGuid(),
-                    Code = definition.Key,
-                    Name = definition.Key,
-                    Group = definition.Group,
+                    Key = definition.Key,
+                    GroupKey = definition.Group,
                     Scope = definition.Scope
                 };
                 dbContext.Permissions.Add(permission);
@@ -35,8 +34,7 @@ public sealed class SystemCatalogService(AuranClinicDbContext dbContext)
             }
             else
             {
-                permission.Name = definition.Key;
-                permission.Group = definition.Group;
+                permission.GroupKey = definition.Group;
                 permission.Scope = definition.Scope;
             }
 
