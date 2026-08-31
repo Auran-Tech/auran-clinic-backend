@@ -6,7 +6,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Route("api/reference")]
+[Route("api/reference-data")]
 [Produces("application/json")]
 [AllowAnonymous]
 public sealed class ReferenceDataController : ControllerBase
@@ -21,7 +21,7 @@ public sealed class ReferenceDataController : ControllerBase
     public ActionResult<IReadOnlyCollection<CountryReferenceResponse>> GetCountries() =>
         Ok(ReferenceDataCatalog.Countries);
 
-    [HttpGet("countries/{countryCode}/cities")]
+    [HttpGet("cities/{countryCode}")]
     [SwaggerOperation(Summary = "Get supported cities for a country", OperationId = "Reference_Cities", Tags = new[] { "Reference Data" })]
     public ActionResult<IReadOnlyCollection<CityReferenceResponse>> GetCities(string countryCode)
     {
