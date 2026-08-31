@@ -1,7 +1,9 @@
+using Auran.Clinic.Api.Infrastructure;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace Auran.Clinic.Api.Controllers;
@@ -12,6 +14,7 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [AllowAnonymous]
+    [EnableRateLimiting(ApiSecurityPolicies.LoginRateLimit)]
     [HttpPost("login")]
     [SwaggerOperation(
         Summary = "Authenticate a clinic user",
@@ -21,6 +24,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [ProducesResponseType(typeof(BaseResponse<AuthResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<BaseResponse<AuthResponse>>> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
