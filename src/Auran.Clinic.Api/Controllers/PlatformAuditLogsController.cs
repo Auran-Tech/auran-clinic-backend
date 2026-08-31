@@ -10,12 +10,12 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Route("api/platform/audit-logs")]
+[Route("api/platform-audit-logs")]
 [Produces("application/json")]
 [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.AuditLogs.View)]
 public sealed class PlatformAuditLogsController(IAuditService auditService) : ControllerBase
 {
-    [HttpGet]
+    [HttpGet("search")]
     [SwaggerOperation(Summary = "Search platform audit logs", Description = "Returns platform-scope events plus clinic-management events performed by platform actors. It intentionally excludes clinic-user clinical activity.", OperationId = "PlatformAuditLogs_Search", Tags = new[] { "Platform Audit" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BaseResponse<PaginatedResponse<AuditLogResponse>>>> Search(
@@ -29,7 +29,7 @@ public sealed class PlatformAuditLogsController(IAuditService auditService) : Co
         });
     }
 
-    [HttpGet("{id:guid}")]
+    [HttpGet("get/{id:guid}")]
     [SwaggerOperation(Summary = "Get platform-visible audit entry", Description = "Returns one audit record when it is within platform administrative audit visibility.", OperationId = "PlatformAuditLogs_GetById", Tags = new[] { "Platform Audit" })]
     public async Task<ActionResult<BaseResponse<AuditLogResponse>>> GetById(Guid id, CancellationToken cancellationToken)
     {
