@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -47,6 +49,15 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'schema/permission-translations'
         shell: bash
         run: |
+          if dotnet ef migrations has-pending-model-changes \
+            --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+            --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
+            --configuration Release \
+            --no-build; then
+            echo "EF model already matches migrations."
+            exit 0
+          fi
+
           dotnet ef migrations add PermissionTranslations \
             --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
             --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
@@ -56,13 +67,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-
-          if git diff --cached --quiet; then
-            echo "No migration files were generated."
-          else
-            git commit -m "schema: generate permission translations migration"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
+          git commit -m "schema: generate permission translations migration"
+          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Apply migrations to SQL Server
         shell: bash
