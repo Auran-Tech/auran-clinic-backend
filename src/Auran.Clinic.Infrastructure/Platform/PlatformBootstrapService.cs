@@ -51,7 +51,7 @@ public sealed class PlatformBootstrapService(
                 .ToListAsync(cancellationToken);
             foreach (var definition in SystemPermissionCatalog.Platform)
             {
-                var permission = permissions[definition.Code];
+                var permission = permissions[definition.Key];
                 if (assignedPermissionIds.Contains(permission.Id))
                     continue;
 
