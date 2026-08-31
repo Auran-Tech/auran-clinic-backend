@@ -107,7 +107,7 @@ public sealed class PlatformClinicsController(
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Update)]
     [SwaggerOperation(
         Summary = "Create a clinic branding image upload session",
-        Description = "Platform-only upload flow for clinic branding images such as the clinic logo. Supports PNG, JPEG and WEBP. Upload the raw bytes to the returned temporary UploadUrl, complete the session, then use the returned URL in the clinic update request.",
+        Description = "Platform-only upload flow for clinic branding images such as the clinic logo. Supports PNG, JPEG and WEBP. Upload the raw bytes to the returned UploadUrl, complete the session, then use the returned URL in the clinic update request.",
         OperationId = "PlatformClinicBranding_CreateUploadSession",
         Tags = new[] { "Platform Clinics" })]
     [ProducesResponseType(typeof(BaseResponse<FileUploadSessionResponse>), StatusCodes.Status201Created)]
@@ -121,14 +121,16 @@ public sealed class PlatformClinicsController(
         try
         {
             var result = await fileService.CreateClinicBrandingUploadSessionAsync(id, request.ToServiceRequest(), cancellationToken);
-            return result is null
-                ? NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." })
-                : StatusCode(StatusCodes.Status201Created, new BaseResponse<FileUploadSessionResponse>
-                {
-                    Status = true,
-                    Message = "Clinic branding upload session created.",
-                    Data = result
-                });
+            if (result is null)
+                return NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." });
+
+            SetCanonicalUploadUrl(result);
+            return StatusCode(StatusCodes.Status201Created, new BaseResponse<FileUploadSessionResponse>
+            {
+                Status = true,
+                Message = "Clinic branding upload session created.",
+                Data = result
+            });
         }
         catch (InvalidOperationException ex)
         {
@@ -154,14 +156,16 @@ public sealed class PlatformClinicsController(
         try
         {
             var result = await fileService.CompleteClinicBrandingUploadAsync(id, sessionId, cancellationToken);
-            return result is null
-                ? NotFound(new BaseResponse { Status = false, Message = "Clinic branding upload session was not found." })
-                : Ok(new BaseResponse<FileResponse>
-                {
-                    Status = true,
-                    Message = "Clinic branding image uploaded successfully.",
-                    Data = result
-                });
+            if (result is null)
+                return NotFound(new BaseResponse { Status = false, Message = "Clinic branding upload session was not found." });
+
+            SetCanonicalFileUrl(result);
+            return Ok(new BaseResponse<FileResponse>
+            {
+                Status = true,
+                Message = "Clinic branding image uploaded successfully.",
+                Data = result
+            });
         }
         catch (InvalidOperationException ex)
         {
@@ -209,6 +213,15 @@ public sealed class PlatformClinicsController(
             ? NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." })
             : Ok(new BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>> { Status = true, Data = result });
     }
+
+    private void SetCanonicalUploadUrl(FileUploadSessionResponse response)
+    {
+        var token = Uri.EscapeDataString(response.UploadToken ?? string.Empty);
+        response.UploadUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/files/upload-content/{response.SessionId}?token={token}";
+    }
+
+    private void SetCanonicalFileUrl(FileResponse response) =>
+        response.Url = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/files/download/{response.Id}";
 
     private static BaseResponse Error(string message) => new()
     {
