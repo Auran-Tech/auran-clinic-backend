@@ -41,16 +41,10 @@ public sealed class RefreshTokenFlowTests(ApiFactory factory) : IClassFixture<Ap
         var userASession = await LoginAsync(client, userACredentials);
         var userBSession = await LoginAsync(client, userBCredentials);
 
-        using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout")
-        {
-            Content = JsonContent.Create(new RefreshTokenRequest
-            {
-                RefreshToken = userBSession.RefreshToken
-            })
-        };
-        logoutRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userASession.AccessToken);
-
-        var logoutResponse = await client.SendAsync(logoutRequest);
+        var logoutResponse = await LogoutAsync(
+            client,
+            userASession.AccessToken,
+            userBSession.RefreshToken);
         logoutResponse.EnsureSuccessStatusCode();
 
         var ownerRefreshResponse = await client.PostAsJsonAsync(
@@ -58,6 +52,57 @@ public sealed class RefreshTokenFlowTests(ApiFactory factory) : IClassFixture<Ap
             new RefreshTokenRequest { RefreshToken = userBSession.RefreshToken });
 
         Assert.Equal(HttpStatusCode.OK, ownerRefreshResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_RevokesAssociatedAccessTokenImmediately()
+    {
+        var clinicId = await CreateClinicAsync();
+        var credentials = await CreateUserAsync(clinicId, "logout-session");
+        using var client = factory.CreateClient();
+        var session = await LoginAsync(client, credentials);
+
+        var logoutResponse = await LogoutAsync(
+            client,
+            session.AccessToken,
+            session.RefreshToken);
+        logoutResponse.EnsureSuccessStatusCode();
+
+        var reusedAccessTokenResponse = await LogoutAsync(
+            client,
+            session.AccessToken,
+            session.RefreshToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reusedAccessTokenResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RefreshRotation_InvalidatesOriginalAccessTokenAndKeepsReplacementActive()
+    {
+        var clinicId = await CreateClinicAsync();
+        var credentials = await CreateUserAsync(clinicId, "rotated-session");
+        using var client = factory.CreateClient();
+        var originalSession = await LoginAsync(client, credentials);
+
+        var refreshResponse = await client.PostAsJsonAsync(
+            "/api/auth/refresh",
+            new RefreshTokenRequest { RefreshToken = originalSession.RefreshToken });
+        refreshResponse.EnsureSuccessStatusCode();
+        var envelope = await refreshResponse.Content.ReadFromJsonAsync<BaseResponse<AuthResponse>>();
+        Assert.NotNull(envelope?.Data);
+        var replacementSession = envelope.Data;
+
+        var originalAccessResponse = await LogoutAsync(
+            client,
+            originalSession.AccessToken,
+            replacementSession.RefreshToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, originalAccessResponse.StatusCode);
+
+        var replacementAccessResponse = await LogoutAsync(
+            client,
+            replacementSession.AccessToken,
+            replacementSession.RefreshToken);
+        Assert.Equal(HttpStatusCode.OK, replacementAccessResponse.StatusCode);
     }
 
     private async Task<Guid> CreateClinicAsync()
@@ -126,6 +171,22 @@ public sealed class RefreshTokenFlowTests(ApiFactory factory) : IClassFixture<Ap
         Assert.True(envelope.Status);
         Assert.NotNull(envelope.Data);
         return envelope.Data;
+    }
+
+    private static Task<HttpResponseMessage> LogoutAsync(
+        HttpClient client,
+        string accessToken,
+        string refreshToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout")
+        {
+            Content = JsonContent.Create(new RefreshTokenRequest
+            {
+                RefreshToken = refreshToken
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return client.SendAsync(request);
     }
 
     private sealed record TestCredentials(string Email, string Password);

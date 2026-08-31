@@ -144,7 +144,11 @@ public sealed class AuthService(
             .AnyAsync(clinic => clinic.Id == user.ClinicId && clinic.IsActive, cancellationToken);
     }
 
-    private async Task<AuthResponse> CreateSessionAsync(User user, ApplicationIdentityUser identityUser, CancellationToken cancellationToken, bool saveChanges = true)
+    private async Task<AuthResponse> CreateSessionAsync(
+        User user,
+        ApplicationIdentityUser identityUser,
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         var roleIds = await dbContext.UserRoles.AsNoTracking()
             .Where(x => x.ClinicId == user.ClinicId && x.UserId == user.Id)
@@ -162,12 +166,20 @@ public sealed class AuthService(
             roleIds,
             cancellationToken);
 
+        var sessionId = Guid.NewGuid();
         var expiresDate = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
-        var accessToken = CreateAccessToken(user, identityUser, roles, permissions, expiresDate);
         var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var accessToken = CreateAccessToken(
+            user,
+            identityUser,
+            roles,
+            permissions,
+            sessionId,
+            expiresDate);
 
         dbContext.RefreshTokens.Add(new RefreshToken
         {
+            Id = sessionId,
             ClinicId = user.ClinicId,
             UserId = user.Id,
             TokenHash = HashToken(rawRefreshToken),
@@ -195,13 +207,20 @@ public sealed class AuthService(
         };
     }
 
-    private string CreateAccessToken(User user, ApplicationIdentityUser identityUser, IEnumerable<string> roles, IEnumerable<string> permissions, DateTime expiresDate)
+    private string CreateAccessToken(
+        User user,
+        ApplicationIdentityUser identityUser,
+        IEnumerable<string> roles,
+        IEnumerable<string> permissions,
+        Guid sessionId,
+        DateTime expiresDate)
     {
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, identityUser.Id),
             new("user_id", user.Id.ToString()),
             new("clinic_id", user.ClinicId.ToString()),
+            new("session_id", sessionId.ToString()),
             new("super_user", user.IsSuperUser.ToString().ToLowerInvariant()),
             new(JwtRegisteredClaimNames.Email, identityUser.Email ?? user.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
