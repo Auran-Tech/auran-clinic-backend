@@ -76,6 +76,26 @@ public static class DependencyInjection
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        if (context.Principal is null)
+                        {
+                            context.Fail("Authenticated principal is missing.");
+                            return;
+                        }
+
+                        var validator = context.HttpContext.RequestServices
+                            .GetRequiredService<AccessTokenStateValidator>();
+                        if (!await validator.IsActiveAsync(
+                                context.Principal,
+                                context.HttpContext.RequestAborted))
+                        {
+                            context.Fail("The user or clinic is inactive.");
+                        }
+                    }
+                };
             });
 
         services.AddAuthorization();
@@ -83,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
+        services.AddScoped<AccessTokenStateValidator>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddAuranCaching();
