@@ -8,6 +8,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY must be set}
     depends_on:
       sqlserver:
         condition: service_healthy
