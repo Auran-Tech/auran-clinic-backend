@@ -20,6 +20,10 @@ public class ClinicConfiguration : IEntityTypeConfiguration<ClinicEntity>
             .HasMaxLength(50)
             .IsRequired();
 
+        builder.Property(x => x.IsActive)
+            .HasDefaultValue(true)
+            .IsRequired();
+
         builder.HasIndex(x => x.Code)
             .IsUnique();
 

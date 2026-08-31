@@ -8,6 +8,8 @@ public class Clinic : BaseEntity
 
     public required string Code { get; set; }
 
+    public bool IsActive { get; set; } = true;
+
     public string? LogoUrl { get; set; }
 
     public string? PrimaryColor { get; set; }
