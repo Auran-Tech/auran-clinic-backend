@@ -13,7 +13,7 @@ namespace Auran.Clinic.Infrastructure.Persistence;
 public class AuranClinicDbContext(
     DbContextOptions<AuranClinicDbContext> options,
     ICurrentActor currentActor)
-    : IdentityDbContext<ApplicationIdentityUser>(options)
+    : IdentityUserContext<ApplicationIdentityUser>(options)
 {
     private static readonly MethodInfo ConfigureClinicFilterMethod = typeof(AuranClinicDbContext)
         .GetMethod(nameof(ConfigureClinicFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -27,10 +27,10 @@ public class AuranClinicDbContext(
 
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
     public new DbSet<User> Users => Set<User>();
-    public new DbSet<Role> Roles => Set<Role>();
+    public DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<PermissionTranslation> PermissionTranslations => Set<PermissionTranslation>();
-    public new DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CodeCounter> CodeCounters => Set<CodeCounter>();
@@ -52,6 +52,7 @@ public class AuranClinicDbContext(
     public DbSet<PatientProfileField> PatientProfileFields => Set<PatientProfileField>();
     public DbSet<PatientProfileFieldOption> PatientProfileFieldOptions => Set<PatientProfileFieldOption>();
     public DbSet<PatientProfileValue> PatientProfileValues => Set<PatientProfileValue>();
+    public DbSet<PatientProfileValueOption> PatientProfileValueOptions => Set<PatientProfileValueOption>();
     public DbSet<ClinicalField> ClinicalFields => Set<ClinicalField>();
     public DbSet<ClinicalFieldOption> ClinicalFieldOptions => Set<ClinicalFieldOption>();
     public DbSet<ClinicalMeasurement> ClinicalMeasurements => Set<ClinicalMeasurement>();
