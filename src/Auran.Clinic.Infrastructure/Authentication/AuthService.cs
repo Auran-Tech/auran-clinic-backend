@@ -17,6 +17,7 @@ namespace Auran.Clinic.Infrastructure.Authentication;
 public sealed class AuthService(
     AuranClinicDbContext dbContext,
     UserManager<ApplicationIdentityUser> userManager,
+    SignInManager<ApplicationIdentityUser> signInManager,
     IEffectivePermissionService effectivePermissionService,
     IOptions<JwtOptions> jwtOptions) : IAuthService
 {
@@ -25,7 +26,14 @@ public sealed class AuthService(
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var identityUser = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (identityUser is null || !await userManager.CheckPasswordAsync(identityUser, request.Password))
+        if (identityUser is null)
+            return null;
+
+        var signInResult = await signInManager.CheckPasswordSignInAsync(
+            identityUser,
+            request.Password,
+            lockoutOnFailure: true);
+        if (!signInResult.Succeeded)
             return null;
 
         var user = await dbContext.Users.AsNoTracking()
