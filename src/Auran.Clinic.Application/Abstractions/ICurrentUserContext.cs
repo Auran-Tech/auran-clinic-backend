@@ -2,9 +2,11 @@ namespace Auran.Clinic.Application.Abstractions;
 
 public interface ICurrentUserContext
 {
-    Guid UserId { get; }
+    bool IsAuthenticated { get; }
 
-    Guid ClinicId { get; }
+    Guid? UserId { get; }
+
+    Guid? ClinicId { get; }
 
     bool IsSuperUser { get; }
 }
