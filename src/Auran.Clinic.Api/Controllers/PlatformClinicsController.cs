@@ -14,14 +14,14 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Route("api/platform/clinics")]
+[Route("api/platform-clinics")]
 [Produces("application/json")]
 [Authorize(Policy = ActorPolicies.Platform)]
 public sealed class PlatformClinicsController(
     IPlatformClinicService clinicService,
     IFileService fileService) : ControllerBase
 {
-    [HttpPost]
+    [HttpPost("create")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Create)]
     [SwaggerOperation(
         Summary = "Provision a clinic",
@@ -51,7 +51,7 @@ public sealed class PlatformClinicsController(
         });
     }
 
-    [HttpGet]
+    [HttpGet("search")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.View)]
     [SwaggerOperation(Summary = "Search clinics", Description = "Platform-only paginated clinic search across tenants. Supports text and active-state filters and does not expose clinical patient data.", OperationId = "PlatformClinics_Search", Tags = new[] { "Platform Clinics" })]
     [ProducesResponseType(typeof(BaseResponse<PaginatedResponse<ClinicSummaryResponse>>), StatusCodes.Status200OK)]
@@ -67,7 +67,7 @@ public sealed class PlatformClinicsController(
         });
     }
 
-    [HttpGet("{id:guid}")]
+    [HttpGet("get/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.View)]
     [SwaggerOperation(Summary = "Get clinic administration details", Description = "Returns tenant identity, configuration and initial Admin summary for platform administration. It does not expose patient or clinical records.", OperationId = "PlatformClinics_GetById", Tags = new[] { "Platform Clinics" })]
     public async Task<ActionResult<BaseResponse<ClinicDetailsResponse>>> GetById(Guid id, CancellationToken cancellationToken)
@@ -78,7 +78,7 @@ public sealed class PlatformClinicsController(
             : Ok(new BaseResponse<ClinicDetailsResponse> { Status = true, Data = result });
     }
 
-    [HttpPut("{id:guid}")]
+    [HttpPut("update/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Update)]
     [SwaggerOperation(
         Summary = "Update clinic administration data",
@@ -103,7 +103,7 @@ public sealed class PlatformClinicsController(
         }
     }
 
-    [HttpPost("{id:guid}/branding/upload-sessions")]
+    [HttpPost("create-branding-upload-session/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Update)]
     [SwaggerOperation(
         Summary = "Create a clinic branding image upload session",
@@ -136,7 +136,7 @@ public sealed class PlatformClinicsController(
         }
     }
 
-    [HttpPost("{id:guid}/branding/upload-sessions/{sessionId:guid}/complete")]
+    [HttpPost("complete-branding-upload-session/{id:guid}/{sessionId:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.Update)]
     [SwaggerOperation(
         Summary = "Complete a clinic branding image upload",
@@ -169,7 +169,7 @@ public sealed class PlatformClinicsController(
         }
     }
 
-    [HttpPut("{id:guid}/status")]
+    [HttpPut("set-status/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.SetStatus)]
     [SwaggerOperation(Summary = "Set clinic status", Description = "Activates or suspends a clinic. Suspension is enforced on subsequent clinic requests, including requests using previously issued JWTs, through the centralized clinic access guard.", OperationId = "PlatformClinics_SetStatus", Tags = new[] { "Platform Clinics" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
@@ -184,7 +184,7 @@ public sealed class PlatformClinicsController(
             : NotFound(new BaseResponse { Status = false, Message = "Clinic was not found." });
     }
 
-    [HttpGet("{id:guid}/features")]
+    [HttpGet("get-features/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.View)]
     [SwaggerOperation(Summary = "Get clinic features", Description = "Returns the global feature catalog projected with enabled state and per-clinic configuration for the selected clinic.", OperationId = "PlatformClinicFeatures_Get", Tags = new[] { "Platform Clinics" })]
     public async Task<ActionResult<BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>>>> GetFeatures(Guid id, CancellationToken cancellationToken)
@@ -195,7 +195,7 @@ public sealed class PlatformClinicsController(
             : Ok(new BaseResponse<IReadOnlyCollection<ClinicFeatureResponse>> { Status = true, Data = result });
     }
 
-    [HttpPut("{id:guid}/features")]
+    [HttpPut("update-features/{id:guid}")]
     [Authorize(Policy = PermissionPolicy.PlatformPrefix + Permissions.Platform.Clinics.ManageFeatures)]
     [SwaggerOperation(Summary = "Update clinic features", Description = "Platform-only feature entitlement management. Feature state is independent from clinic RBAC permissions and cache entries are invalidated immediately after changes.", OperationId = "PlatformClinicFeatures_Update", Tags = new[] { "Platform Clinics" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
