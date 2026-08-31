@@ -1,80 +1,29 @@
-# AURAN Clinic — Consolidated Architecture, Product Decisions and Implementation Notes
+# AURAN Clinic — Consolidated Backend Specification
 
-_Last updated: 2026-08-30_
+_Last updated: 2026-08-31_
 
-This document consolidates the important product, architecture, security, data-model, API, testing and implementation decisions discussed during the current AURAN Clinic backend work. It is intended to act as a durable project reference so decisions do not remain only in chat history.
+This document is the current authoritative backend foundation reference. When an older document, comment, or prototype note conflicts with this file and the implemented code, this file describes the intended current foundation behavior.
 
-> Status note: PR #5 (`feature/clinic-management-audit-foundation`) is still under active review and must not be merged until explicitly approved.
+## 1. Product and architecture
 
----
+AURAN Clinic is a multi-tenant clinic-management product using one frontend codebase and one backend codebase. Clinic differences are represented by configuration and data, not customer-specific code copies.
 
-## 1. Product Direction
-
-AURAN Clinic is being built as a multi-tenant clinic-management product using one frontend codebase and one backend codebase. Different clinics are tenants/customers and differences between customers should be driven by configuration and data, not by customer-specific source-code copies.
-
-The V1 goal is to establish the clinic/platform foundation first, then build patient, queue, visit and clinical modules on top of it.
-
-### Initial clinic roles
-
-The protected system roles are:
-
-- Admin
-- Receptionist
-- Doctor
-- Nurse
-
-System roles cannot be renamed or deleted and their built-in role identity is protected. Users can have multiple roles and effective permissions are the union of their role permissions.
-
-### Clinic Super User
-
-A Clinic Super User is different from a Platform Admin.
-
-A Clinic Super User:
-
-- belongs to exactly one clinic,
-- bypasses clinic RBAC only inside that clinic,
-- sees all clinic pages/actions,
-- cannot be restricted by ordinary clinic administrators,
-- cannot access or manage other clinics,
-- cannot access platform administration merely because they are a clinic super user.
-
-### Platform Admin
-
-Platform users are AURAN-side operators, not clinic users. Platform access is intentionally separated from clinic access.
-
-A Platform Admin can:
-
-- create/provision clinics,
-- list clinics,
-- update clinic metadata,
-- activate/suspend clinics,
-- manage clinic feature entitlements,
-- manage future platform users/roles,
-- read platform-operational audit data within the defined platform scope.
-
-A Platform Admin does **not** automatically gain unrestricted patient/clinical-data access. Future support access to clinical data must use an explicit, time-limited, heavily audited support/break-glass mechanism rather than implicit platform privilege.
-
----
-
-## 2. Core Technology and Solution Architecture
-
-The backend stack is:
+Backend stack:
 
 - .NET 10
 - ASP.NET Core Web API
-- SQL Server
-- Entity Framework Core
+- SQL Server 2022
+- Entity Framework Core 10
 - ASP.NET Core Identity
-- JWT authentication
+- JWT Bearer authentication
 - FluentValidation
 - Serilog
 - Swagger/OpenAPI
-- Memory or Redis caching
-- Modular Monolith architecture
+- in-process memory caching
+- xUnit
+- modular monolith architecture
 
-There is no API version prefix at this stage; routes use `/api/...`.
-
-### Projects
+Projects:
 
 ```text
 src/Auran.Clinic.Api
@@ -86,254 +35,252 @@ tests/Auran.Clinic.UnitTests
 tests/Auran.Clinic.IntegrationTests
 ```
 
-There is intentionally no separate Shared project/layer.
+There is no Shared project/layer.
 
-### Controller/service rule
+## 2. Security scopes
 
-Controllers remain thin. Business behavior belongs in Application/Infrastructure services.
+Platform and Clinic actors are separate security scopes.
 
-### Common response models
+### Platform actor
 
-```csharp
-public class BaseResponse
-{
-    public string? Message { get; set; }
-    public bool Status { get; set; }
-    public string? Error { get; set; }
-}
+Represents an AURAN-side operator. Platform actors manage tenant lifecycle, feature entitlement, and platform-visible audit information.
 
-public class BaseResponse<T> : BaseResponse where T : class
-{
-    public T? Data { get; set; }
-}
-```
+A Platform Admin does not automatically gain clinical-data access.
 
-Pagination uses:
+### Clinic actor
 
-```csharp
-public class PaginatedResponse<T>
-{
-    public List<T> Data { get; set; } = new List<T>();
-    public required PaginationInfo Setting { get; set; }
-}
-```
+Represents a user inside exactly one clinic. Clinic users are restricted to their authenticated `ClinicId`.
 
-with `PaginationInfo` containing `TotalCount`, `RowCount`, `CurrentPage` and calculated `TotalPage`.
+A Clinic Super User:
 
----
+- belongs to one clinic,
+- receives all clinic-scoped permissions from the backend,
+- bypasses ordinary clinic RBAC only inside that clinic,
+- does not become a Platform Admin,
+- cannot access another clinic.
 
-## 3. Multi-Tenant Model
+## 3. Identity and account state
 
-The system uses one application for many clinics.
-
-### Rules
-
-- All clinic-owned business entities are scoped by `ClinicId`.
-- Clinic endpoints derive the tenant from the authenticated token; the client must not be allowed to switch tenant using a route/query `ClinicId`.
-- Platform and clinic authentication/authorization scopes are intentionally separate.
-- Tenant security must be correct from the beginning even though future SaaS/account abstractions are not being overbuilt yet.
-
-### Domain user separation
-
-Clinic user:
+ASP.NET Core Identity is the credential store.
 
 ```text
-User : ClinicEntity
+ApplicationIdentityUser(AccountType=Platform) -> PlatformUser
+ApplicationIdentityUser(AccountType=Clinic)   -> User -> Clinic
 ```
 
-Platform user:
+Identity lockout and business account state are different controls:
+
+- Identity lockout protects against repeated authentication failures.
+- `User.IsActive` enables/disables a clinic business account.
+- `Clinic.IsActive` enables/suspends the complete tenant.
+
+Suspending a clinic blocks all clinic accounts, including requests using previously issued access tokens.
+
+## 4. Current actor context and tenant isolation
+
+`ICurrentActor` is the single authenticated-actor abstraction.
+
+It exposes actor type, Identity id, Platform/Clinic domain ids, ClinicId, Super User state, display name, and email.
+
+Clinic isolation is enforced centrally by EF Core:
+
+1. Global query filters restrict `ClinicEntity` queries to the authenticated clinic.
+2. SaveChanges guards reject cross-clinic create/update/delete attempts.
+3. `ClinicId` is not accepted from normal clinic-facing requests as an authorization boundary.
+
+Platform/system operations use their explicit non-clinic actor scope.
+
+## 5. Authentication and revocable sessions
+
+Clinic and Platform authentication use separate endpoints and domain session records.
+
+JWTs contain an explicit actor type and a `session_id`.
+
+Clinic JWT claims conceptually include:
 
 ```text
-PlatformUser : BaseEntity
+actor_type=Clinic
+clinic_user_id
+clinic_id
+clinic_super_user
+clinic_role
+clinic_permission
+session_id
 ```
 
-ASP.NET Identity remains the global credential store.
-
-`ApplicationIdentityUser.AccountType` identifies whether an Identity credential belongs to a `Clinic` or `Platform` account.
-
-There is no fake AURAN clinic used for platform administrators.
-
----
-
-## 4. Authentication and Authorization
-
-### Actor types
-
-The authenticated actor is one of:
-
-- Clinic
-- Platform
-
-System audit operations may additionally use `System` as an audit actor type.
-
-### Clinic JWT claims
-
-Conceptually:
+Platform JWT claims conceptually include:
 
 ```text
-actor_type = Clinic
-clinic_user_id = ...
-clinic_id = ...
-clinic_super_user = true/false
-clinic_role = ...
-clinic_permission = ...
-session_id = ...
+actor_type=Platform
+platform_user_id
+platform_role
+platform_permission
+session_id
 ```
 
-### Platform JWT claims
+Every protected request validates both the JWT and the persisted session state.
 
-Conceptually:
-
-```text
-actor_type = Platform
-platform_user_id = ...
-platform_role = PLATFORM_ADMIN
-platform_permission = ...
-session_id = ...
-```
-
-A Platform token does not contain `clinic_id`.
-
-The old generic `super_user=true` cross-scope concept is not allowed.
-
-### Current actor abstraction
-
-```csharp
-ICurrentActor
-{
-    bool IsAuthenticated;
-    ActorType ActorType;
-    string? IdentityUserId;
-    Guid? PlatformUserId;
-    Guid? ClinicUserId;
-    Guid? ClinicId;
-    bool IsClinicSuperUser;
-    string? DisplayName;
-    string? Email;
-}
-```
-
-### Scoped permission policies
-
-Permissions are separated by scope.
-
-Clinic permission succeeds only when:
-
-- actor is Clinic,
-- clinic is active,
-- and the actor either has the required clinic permission or is the clinic's super user.
-
-Platform permission succeeds only when:
-
-- actor is Platform,
-- and actor has the required platform permission.
-
-No cross-scope bypass is permitted.
-
-### Access-session revocation
-
-JWTs are not treated as irrevocable until expiry.
-
-Every issued access token is tied to a server-side session using `session_id`. Refresh-token records represent the authenticated session state.
-
-Expected lifecycle:
+Session lifecycle:
 
 ```text
 Login
   -> AccessToken1 + RefreshToken1 + Session1
 
-Refresh RefreshToken1
-  -> Session1 revoked
-  -> AccessToken1 becomes invalid immediately
-  -> RefreshToken1 becomes invalid
-  -> AccessToken2 + RefreshToken2 + Session2
+Refresh
+  -> atomically revoke Session1
+  -> issue AccessToken2 + RefreshToken2 + Session2
+  -> old access token becomes invalid
 
-Logout using current session
-  -> current session revoked
-  -> current access token stops working immediately
-  -> current refresh token stops working immediately
+Logout
+  -> revoke current session
+  -> current access token becomes invalid
 ```
 
-This behavior applies to both Platform and Clinic accounts.
+Refresh tokens are cryptographically random. Only SHA-256 hashes are stored.
 
-### Bearer-token normalization
+Clinic login/refresh also reject inactive users, inactive clinics, and Identity lockout where applicable.
 
-Manual testing exposed malformed Authorization headers such as duplicated `Bearer` prefixes or quoted values. The Bearer pipeline normalizes the header before JWT validation while still retaining full issuer/audience/signature/lifetime validation.
+## 6. Authorization and permissions
 
-Swagger's Authorize dialog should receive the raw JWT only; Swagger adds the `Bearer` prefix.
+Permission keys are stable, language-independent identifiers.
 
----
+Examples:
 
-## 5. Platform Bootstrap
+```text
+Patient_View
+Patient_Create
+Patient_Edit_Basic
+Users_View
+Users_Manage
+Users_Manage_Status
+RBAC_View
+RBAC_Manage
+Queue_View
+Queue_Move
+Visit_View
+Visit_Start
+Visit_Edit
+MedicalProfile_View
+MedicalProfile_Edit
+FollowUp_View
+FollowUp_Manage
+Reports_View
+Reports_Export
+Settings_View
+Settings_Manage
+Files_View
+Files_Upload
+```
+
+Platform permission keys use the same underscore convention, for example:
+
+```text
+Platform_Clinics_View
+Platform_Clinics_Create
+Platform_Clinics_Set_Status
+Platform_Clinics_Manage_Features
+```
+
+Persistence:
+
+```text
+Permission
+  Id
+  Key
+  GroupKey
+  Scope
+
+PermissionTranslation
+  Id
+  PermissionId
+  LanguageCode
+  Description
+```
+
+English (`en`) and Arabic (`ar`) descriptions are seeded. German, French, or other languages can be added as translation rows without schema changes.
+
+Normal users receive the union of permissions assigned through their roles. Clinic Super Users receive every clinic-scoped permission from the backend itself.
+
+## 7. Roles
+
+Clinic protected roles:
+
+- Admin
+- Receptionist
+- Doctor
+- Nurse
+
+Roles are clinic-scoped. Users can have multiple roles.
+
+ASP.NET Identity roles are not used as a second application RBAC system. The persistence context uses the user-only Identity model while AURAN domain roles/permissions remain the business authorization model.
+
+## 8. Account status management
+
+Administrative clinic-account state changes require `Users_Manage_Status` or protected Super User behavior according to the service rules.
+
+A user can disable their own account through the explicit self-disable endpoint.
+
+Disabling a user revokes refresh sessions and protected access is rejected immediately.
+
+A normal manager cannot disable a protected Clinic Super User in violation of the service rules.
+
+## 9. Platform bootstrap
 
 There is no public Platform Admin registration endpoint.
 
-The first platform account is created using deployment/bootstrap configuration.
-
-Relevant environment/config keys:
+Initial Platform Admin bootstrap uses secure deployment configuration:
 
 ```text
 PlatformBootstrap__Enabled
+PlatformBootstrap__FullName
 PlatformBootstrap__Email
 PlatformBootstrap__Password
-PlatformBootstrap__FullName
 PlatformBootstrap__Phone
 ```
 
-Bootstrap is disabled by default. No real bootstrap credentials must be committed.
-
-Bootstrap ensures:
+Bootstrap is disabled by default and idempotently ensures:
 
 - permission catalog,
+- translation catalog,
 - feature catalog,
 - protected `PLATFORM_ADMIN` role,
-- platform-role permission mappings,
-- first platform Identity user,
-- matching `PlatformUser`,
+- Platform role-permission mappings,
+- Identity user,
+- `PlatformUser`,
 - role assignment,
 - audit history.
 
-If a platform administrator already exists, bootstrap must not create a duplicate.
+No real bootstrap credentials are committed.
 
----
+## 10. Clinic provisioning
 
-## 6. Clinic Provisioning
-
-Creating a clinic is a provisioning workflow, not a single insert.
+Clinic provisioning is a transaction:
 
 ```text
 Platform Admin
-  -> POST /api/platform/clinics
-  -> Generate clinic business code
-  -> Create Clinic
-  -> Create default ClinicSettings
-  -> Create ClinicFeature defaults
-  -> Create protected clinic roles
-       Admin
-       Receptionist
-       Doctor
-       Nurse
-  -> Assign default role permissions
-  -> Create initial Admin Identity account
-  -> Create clinic domain User
-  -> Assign Admin role
-  -> Write audit events
-  -> COMMIT
+  -> validate request
+  -> generate Clinic.Code
+  -> create Clinic
+  -> create ClinicSettings
+  -> create default ClinicFeatures
+  -> create protected clinic roles
+  -> assign default role permissions
+  -> create initial Admin Identity account
+  -> create clinic User (active)
+  -> assign Admin role
+  -> write audit
+  -> commit
 ```
+
+The caller provides `CodePrefix`, not final `Code`.
 
 The initial clinic Admin is a normal Admin-role user, not automatically a Clinic Super User.
 
-Provisioning should be atomic: a failed provisioning step must not leave a partially created clinic.
+## 11. Business-code generation
 
----
+Business identifiers are generated by the backend.
 
-## 7. Server-Generated Business Codes
-
-Business codes are generated by the backend. The frontend must never generate or submit the final business code.
-
-The user/operator controls only the prefix.
-
-### Format
+Format:
 
 ```text
 PREFIX-YEAR-SEQUENCE
@@ -343,1007 +290,194 @@ Examples:
 
 ```text
 CDC-2026-1
-CDC-2026-2
 PT-2026-1
-PT-2026-2
 ```
 
-### CodeCounter concept
+`CodeCounter` supports Platform and Clinic scopes and currently includes Clinic and Patient code types.
+
+Counter increments are implemented with SQL Server locking/transaction semantics and protected unique indexes so concurrent requests cannot generate duplicate sequence values.
+
+System role/permission/feature keys are constants and are not generated through `CodeCounter`.
+
+## 12. Database invariants
+
+Foundation invariants include:
+
+- unique `(ClinicId, PatientNumber)`,
+- unique `(ClinicId, Phone)`,
+- one queue entry per `(ClinicId, VisitId)`,
+- one active visit session per `(ClinicId, VisitId)` where `EndedAtUtc IS NULL`,
+- one current patient-profile value per `(ClinicId, PatientId, FieldId)`,
+- normalized `PatientProfileValueOption` rows for multi-select values,
+- SQL `rowversion` concurrency on queue entries and visits,
+- CodeCounter scope consistency check constraint and concurrency-safe unique indexes,
+- unique `(PermissionId, LanguageCode)` translation rows.
+
+The dedicated `FollowUp` entity is the source of truth for follow-up data; duplicate visit follow-up text storage was removed.
+
+## 13. Dynamic patient profile
+
+Patient basic identity remains on `Patient`.
+
+Specialty-specific fields use configuration tables:
 
 ```text
-CodeCounters
-------------
-Id
-Scope
-ClinicId nullable
-CodeType
-Prefix
-Year
-LastNumber
-CreatedDate
-UpdatedDate
-CreateByUserId
-UpdatedByUserId
-```
-
-### Scope
-
-`CodeScope` is an enum:
-
-```text
-Platform
-Clinic
-```
-
-### Code type
-
-`CodeType` is an enum for business-generated identifiers, beginning with:
-
-```text
-Clinic
-Patient
-```
-
-System identifiers such as role codes, permission codes and feature codes are **not** generated business codes and remain stable constants.
-
-### Platform-scope example
-
-Clinic creation happens before a tenant `ClinicId` exists:
-
-```text
-Scope      = Platform
-ClinicId   = NULL
-CodeType   = Clinic
-Prefix     = CDC
-Year       = 2026
-LastNumber = 7
-```
-
-Next clinic code:
-
-```text
-CDC-2026-8
-```
-
-### Clinic-scope example
-
-```text
-Scope      = Clinic
-ClinicId   = <clinic id>
-CodeType   = Patient
-Prefix     = PT
-Year       = 2026
-LastNumber = 125
-```
-
-Next patient number:
-
-```text
-PT-2026-126
-```
-
-### Concurrency requirement
-
-Counter increments must be atomic at the database level. Never implement the counter as a plain `SELECT LastNumber`, increment in memory, then `UPDATE`, because concurrent requests could generate duplicates.
-
-### Clinic creation contract
-
-The create-clinic request accepts:
-
-```text
-CodePrefix
-```
-
-not final `Code`.
-
-The generated `Clinic.Code` is immutable after creation.
-
----
-
-## 8. Static Reference Data Strategy
-
-Stable dropdown/reference values should not require database tables or database reads in V1.
-
-### Principle
-
-```text
-Small/stable/system-owned values
-  -> enum or static in-memory catalog
-
-Stable UI/reference options
-  -> static application catalog
-
-Standard runtime data
-  -> runtime/system catalog
-
-Truly business-managed/dynamic data
-  -> database table
-```
-
-A dropdown in the frontend does not automatically imply a database table.
-
-### Static catalogs
-
-Current catalog categories include:
-
-- Fonts
-- Countries
-- Cities
-- Locales
-- Date formats
-- Time formats
-
-These are served directly from application memory.
-
-### Time zones
-
-Time zones are not modeled as a giant enum or DB table.
-
-The backend uses runtime time-zone information and normalizes identifiers to IANA form when possible.
-
-Preferred IDs include:
-
-```text
-Africa/Cairo
-Asia/Riyadh
-Asia/Dubai
-Europe/London
-America/New_York
-```
-
-### Country and city values
-
-Country and city use stable catalog codes rather than DB primary keys in V1.
-
-Example:
-
-```text
-CountryCode = EG
-CityCode    = CAI
-```
-
-### Font values
-
-Fonts are provided as a controlled catalog such as:
-
-```text
-Inter
-Roboto
-Arial
-Open Sans
-Cairo
-Tajawal
-```
-
-### Reference endpoints
-
-```http
-GET /api/reference/fonts
-GET /api/reference/countries
-GET /api/reference/countries/{countryCode}/cities
-GET /api/reference/locales
-GET /api/reference/date-formats
-GET /api/reference/time-formats
-GET /api/reference/time-zones
-```
-
-These endpoints are anonymous reference/catalog operations and do not require reference-table DB queries.
-
----
-
-## 9. Clinic Branding and Settings
-
-Clinic configuration includes or is expected to include:
-
-- logo,
-- primary color,
-- secondary color,
-- font family,
-- welcome title,
-- welcome message,
-- welcome button text,
-- time zone,
-- country code,
-- city code,
-- patient number prefix,
-- phone,
-- email,
-- address,
-- website,
-- locale,
-- date format,
-- time format,
-- documentation reminder hours,
-- prescription header,
-- prescription footer.
-
-A successful login should show an in-app Welcome page once per login/session, with the normal sidebar/navbar visible. The Welcome page is not a sidebar destination. Clinics can configure the welcome title/message/button.
-
----
-
-## 10. File Storage and Upload Architecture
-
-Files are handled through one central file registry and a storage-provider abstraction.
-
-Business entities should store stable `FileId` references instead of permanent external URLs wherever possible.
-
-### Existing central file record concept
-
-`FileRecord` is the permanent metadata registry. It includes metadata such as:
-
-```text
-Id
-ClinicId
-OriginalName
-StoredName
-ContentType
-Size
-StorageProvider
-StorageKey
-UploadedAtUtc
-UploadedByUserId
-```
-
-The goal is to let the physical storage provider change without changing business references.
-
-### Why business entities store FileId
-
-A URL can change when moving from:
-
-```text
-Local server
-  -> S3
-  -> CDN/CloudFront
-```
-
-A permanent `FileId` does not need to change.
-
-The API can compute/return the appropriate URL at response time.
-
-### Upload-session flow
-
-The frontend does not submit file binary as part of a business JSON request.
-
-Expected flow:
-
-```text
-Frontend
-  -> request temporary upload session
-  -> backend creates short-lived scoped session
-  -> backend returns UploadUrl + expiration + upload-session data
-  -> frontend uploads binary to UploadUrl
-  -> frontend completes the upload session
-  -> backend verifies the uploaded object
-  -> backend creates/activates permanent FileRecord
-  -> backend returns FileId + URL + metadata
-  -> business request stores FileId
-```
-
-### Local storage
-
-For local storage, the returned upload URL points to the AURAN API, and the API writes the file to a tenant-scoped local storage path.
-
-Conceptually:
-
-```text
-/storage/{clinicId}/{year}/{month}/{generatedStoredName}
-```
-
-### AWS/S3
-
-The same API contract can later return an S3 presigned URL. The frontend then uploads directly to S3.
-
-The FE workflow should remain the same regardless of Local vs S3.
-
-### Temporary upload-session security
-
-An upload session should track enough information to prevent arbitrary/unverified file registration, including concepts such as:
-
-```text
-ClinicId
-UserId
-OriginalFileName
-ExpectedContentType
-ExpectedSize or MaxSize
-ExpiresAtUtc
-StorageProvider
-StorageKey
-Status
-```
-
-Temporary upload authorization must:
-
-- expire,
-- be tenant scoped,
-- be user/session scoped as appropriate,
-- be one-use after successful upload,
-- avoid storing raw secret tokens in the DB where possible,
-- verify expected metadata before final completion.
-
-### Business payload example
-
-Preferred:
-
-```json
-{
-  "fullName": "Ahmed Ali",
-  "profileImageFileId": "..."
-}
-```
-
-Avoid embedding Base64 file data into business JSON.
-
-Avoid trusting arbitrary externally supplied URLs as proof of an uploaded/owned file.
-
-### File use cases
-
-The same foundation should support:
-
-- clinic logo,
-- patient photo,
-- patient attachments,
-- prescriptions,
-- lab results,
-- radiology images,
-- clinical-order attachments,
-- general documents.
-
----
-
-## 11. Audit Architecture
-
-Audit is centralized and append-only.
-
-### Automatic CRUD audit
-
-An EF Core `SaveChanges` interceptor automatically captures create/update/delete operations for auditable entities.
-
-### Explicit audit events
-
-Some events are not CRUD transitions and are written explicitly, including:
-
-- login,
-- logout,
-- failed login,
-- refresh,
-- permission denied,
-- report export,
-- file download,
-- sensitive reads where required,
-- clinic provisioning,
-- activation/suspension,
-- feature changes.
-
-### AuditLog shape
-
-Conceptually:
-
-```text
-AuditScope            Platform | Clinic
-ClinicId              nullable
-ActorType              System | Clinic | Platform
-ActorId                nullable
-ActorIdentityUserId
-ActorDisplayName
-ActorEmail
-Action
-Category
-EntityType
-EntityId
-Description
-OccurredAtUtc
-MetadataJson
-IpAddress
-UserAgent
-CorrelationId
-CreatedDate
-CreateByUserId
-```
-
-Audit actor information is stored as a snapshot rather than depending exclusively on current user FKs.
-
-### Security and redaction
-
-Audit metadata must redact sensitive values such as:
-
-- password,
-- token,
-- secret,
-- signing key,
-- connection string,
-- API key,
-- credential.
-
-### Audit visibility
-
-Clinic users:
-
-- can see only audit entries for their own clinic,
-- cannot expand visibility by providing another `ClinicId`.
-
-Platform users:
-
-- can see platform-scope operations,
-- can see clinic-scope actions performed by platform actors,
-- do not automatically receive broad access to clinic-user clinical audit metadata.
-
-Audit records do not expose ordinary update/delete APIs.
-
----
-
-## 12. Feature Entitlements
-
-Feature entitlements are different from user permissions.
-
-- Feature = capability enabled for the clinic/tenant.
-- Permission = authorization for a user within enabled capabilities.
-
-### Global feature definitions
-
-Initial feature codes:
-
-```text
-Patients                 default true
-DynamicPatientProfile    default true
-Queue                    default true
-Visits                   default true
-ClinicalOrders           default true
-FollowUps                default true
-Reports                  default true
-AdvancedReports          default false
-AI                       default false
-```
-
-### Tenant mapping
-
-```text
-ClinicFeature
-  ClinicId
-  FeatureDefinitionId
-  IsEnabled
-  ConfigurationJson
-```
-
-### Cache keys
-
-Conceptually:
-
-```text
-clinic:{id}:active
-clinic:{id}:feature:{code}
-```
-
-Feature state is not embedded permanently into JWT claims so disabling a feature does not require waiting for access-token refresh.
-
----
-
-## 13. Patient Profile and Clinical-Data Decisions
-
-### Dynamic patient profile
-
-The selected model is Dynamic Rows, not a hybrid fixed+duplicated structure.
-
-Core entities:
-
-```text
+PatientProfileSection
 PatientProfileField
 PatientProfileFieldOption
 PatientProfileValue
+PatientProfileValueOption
 ```
 
-`PatientProfileValue` uses typed columns such as:
+Typed profile values are used for text/number/boolean/date/file values. Multi-select values use normalized option-link rows rather than JSON arrays.
+
+## 14. Files
+
+Business entities should store stable `FileId` references rather than permanent storage URLs wherever possible.
+
+Upload flow:
 
 ```text
-TextValue
-NumberValue
-BooleanValue
-DateValue
+create upload session
+  -> return short-lived UploadUrl
+  -> upload raw bytes
+  -> complete upload session
+  -> create permanent FileRecord
+  -> return FileId + metadata + current URL
 ```
 
-`JsonValue` is reserved only for genuinely complex values.
+Upload tokens are short-lived scoped credentials and are stored only as hashes.
 
-Enums stored in the database are persisted as strings, never ordinal integers.
+Local storage is implemented behind a storage-provider abstraction. S3/direct-storage behavior can be added later without changing business file references.
 
-### Dynamic field types
+## 15. Audit
 
-V1 dynamic field types:
+Audit is append-only.
+
+Automatic EF auditing captures entity mutations. Explicit events capture authentication, refresh/logout, authorization denial, provisioning, status changes, feature changes, file downloads, and other non-CRUD operations.
+
+Audit actor snapshots preserve identity context historically.
+
+Sensitive values such as passwords, JWTs, refresh tokens, signing keys, API keys, credentials, and connection strings must be redacted.
+
+## 16. Caching
+
+V1 uses **memory caching only**.
+
+Redis support, Redis packages, Redis runtime configuration, and the Redis docker service are intentionally removed.
+
+A distributed-cache strategy may be introduced later if multi-instance deployment requires it.
+
+## 17. API route convention
+
+Implemented controller routes follow:
 
 ```text
-Text
-LongText / Textarea
-Number
-Boolean
-Date
-Image
-File
-Single Select
-Multi Select
+/api/{controller-name}/{endpoint-name}
 ```
 
-### Duplicate-patient assistance
-
-Expected behavior:
-
-- proactive similarity search by name/phone,
-- hard backend block on exact duplicate phone where applicable.
-
-### Patient number
-
-Patient number is server-generated using the same code-counter foundation:
+Examples:
 
 ```text
-PREFIX-YEAR-SEQUENCE
-```
-
-Only the prefix is configurable by the clinic.
-
----
-
-## 14. Workflow, Visits and Clinical Orders
-
-### Workflow
-
-V1 uses one clinic-wide dynamic workflow.
-
-### Visits
-
-A visit can contain multiple doctor sessions.
-
-Operational visit completion is separate from clinical documentation completion.
-
-The product should expose a Pending Documentation area/reminder so work can be operationally finished while documentation remains incomplete.
-
-### Follow-up
-
-V1 supports follow-up recommendations.
-
-### Clinical-order / prescription workspace
-
-Prescription is treated as a configurable clinical-order workspace rather than only a medication print form.
-
-It can contain:
-
-- medications,
-- tests,
-- radiology,
-- procedures,
-- instructions,
-- follow-up.
-
-Files/images can be associated with prescriptions/orders/results through the shared file foundation.
-
-Autocomplete/suggestions may use historical medication/test/radiology values.
-
----
-
-## 15. Reports, Dashboard and Queue UX Decisions
-
-### Reports
-
-Report workflow:
-
-```text
-Choose report
-  -> report-specific filters
-  -> Preview
-  -> Export PDF / Excel
-```
-
-### Dashboard
-
-Dashboard is for statistics/charts rather than serving as a general report builder.
-
-### Live Queue
-
-Live Queue should show removable active-filter chips.
-
-A `+ Search / Check In` action is not part of the selected design.
-
----
-
-## 16. Deferred / Future Scope
-
-Explicitly deferred or future items include:
-
-- appointment scheduling/calendar,
-- branches,
-- family linking,
-- offline sync,
-- full SaaS subscriptions/billing,
-- platform owner portal beyond current foundation,
-- advanced support/break-glass clinical access,
-- multi-clinic membership under one human identity unless future requirements demand it.
-
-The current architecture keeps enough foundation for future SaaS evolution without overbuilding those modules now.
-
----
-
-## 17. API Route Groups
-
-### Platform authentication
-
-```http
-POST /api/platform/auth/login
-POST /api/platform/auth/refresh
-POST /api/platform/auth/logout
-```
-
-### Clinic authentication
-
-```http
 POST /api/auth/login
 POST /api/auth/refresh
 POST /api/auth/logout
+GET  /api/auth/me
+
+POST /api/platform-auth/login
+POST /api/platform-auth/refresh
+POST /api/platform-auth/logout
+
+GET  /api/platform-clinics/search
+POST /api/platform-clinics/create
+GET  /api/platform-clinics/get/{id}
+PUT  /api/platform-clinics/update/{id}
+PUT  /api/platform-clinics/set-status/{id}
+GET  /api/platform-clinics/get-features/{id}
+PUT  /api/platform-clinics/update-features/{id}
+
+GET  /api/clinic/get-current
+GET  /api/clinic/get-settings
+PUT  /api/clinic/update-settings
+GET  /api/clinic/get-features
+
+GET  /api/permissions/list
+PUT  /api/users/status
+POST /api/users/disable-self
 ```
 
-### Platform clinic management
+Reference-data endpoints follow the same controller/action pattern under `/api/reference-data/...`.
 
-```http
-GET  /api/platform/clinics
-POST /api/platform/clinics
-GET  /api/platform/clinics/{id}
-PUT  /api/platform/clinics/{id}
-PUT  /api/platform/clinics/{id}/status
-GET  /api/platform/clinics/{id}/features
-PUT  /api/platform/clinics/{id}/features
-```
+Stable Swagger `OperationId` values are contract-tested.
 
-### Clinic self service
+## 18. HTTP/security middleware
 
-```http
-GET /api/clinic
-GET /api/clinic/settings
-PUT /api/clinic/settings
-GET /api/clinic/features
-```
+The API foundation includes:
 
-### Audit
+- global exception handling,
+- standardized API response failures,
+- CORS allow-list configuration,
+- login rate limiting,
+- forwarded-header support,
+- JWT validation,
+- structured authentication/authorization failures,
+- `/health/live`,
+- `/health/ready` with database readiness checking,
+- Swagger/OpenAPI.
 
-```http
-GET /api/platform/audit-logs
-GET /api/platform/audit-logs/{id}
+Production signing keys and secrets come from deployment configuration and are not committed.
 
-GET /api/audit-logs
-GET /api/audit-logs/{id}
-```
+## 19. Testing and CI
 
-### Reference data
+Every implemented change requires automated test coverage appropriate to its level.
 
-```http
-GET /api/reference/fonts
-GET /api/reference/countries
-GET /api/reference/countries/{countryCode}/cities
-GET /api/reference/locales
-GET /api/reference/date-formats
-GET /api/reference/time-formats
-GET /api/reference/time-zones
-```
+CI performs:
 
-### Health/OpenAPI
+1. restore,
+2. Release build,
+3. SQL Server 2022 startup,
+4. migration application to a clean database,
+5. EF pending-model-change verification,
+6. unit tests,
+7. integration/contract tests,
+8. SQL-backed foundation tests,
+9. API publish.
 
-```http
-GET /health/live
-GET /swagger/v1/swagger.json
-```
+SQL-backed automated coverage includes:
 
-The Swagger JSON endpoint is the OpenAPI document itself and therefore does not appear as a normal operation inside the document it serves.
-
----
-
-## 18. Manual Authentication Test Contract
-
-### Login and protected request
-
-```text
-POST login
-  -> A1 + R1
-
-Use A1 on protected endpoint
-  -> 200
-```
-
-### Refresh rotation
-
-```text
-POST refresh using R1
-  -> A2 + R2
-
-Use A1
-  -> 401
-
-Reuse R1
-  -> 401
-
-Use A2
-  -> 200
-```
-
-### Logout
-
-```text
-POST logout using current authenticated session
-  -> 200
-
-Use the old access token from that session
-  -> 401
-
-Reuse refresh token from that session
-  -> 401
-```
-
-### Security-scope isolation
-
-Clinic token on Platform route:
-
-```text
-403 Forbidden
-```
-
-Platform token on Clinic route:
-
-```text
-403 Forbidden
-```
-
-### Clinic suspension
-
-When a clinic is suspended:
-
-- existing clinic-authenticated sessions must stop working,
-- clinic login must fail,
-- clinic refresh must fail.
-
-Reactivation restores the ability to establish valid sessions.
-
----
-
-## 19. Manual Clinic-Provisioning Test Contract
-
-A create-clinic test should verify all of the following:
-
-```text
-POST /api/platform/clinics
-  -> generated Clinic.Code
-  -> Clinic row
-  -> ClinicSettings
-  -> default ClinicFeatures
-  -> Admin/Receptionist/Doctor/Nurse roles
-  -> RolePermissions
-  -> Identity user
-  -> domain User
-  -> Admin UserRole
-  -> Audit
-```
-
-The final clinic code is not supplied manually.
-
-Create two clinics with the same valid prefix and verify distinct sequential generated values.
-
-After creation:
-
-```http
-GET /api/platform/clinics/{clinicId}
-```
-
-must return the generated code and configuration.
-
----
-
-## 20. OpenAPI Contract
-
-Swagger/OpenAPI is treated as the machine-readable source of truth for API discovery and future AI/tool integration.
-
-Requirements include:
-
-- stable operation IDs,
-- accurate auth requirements,
-- anonymous login/refresh/reference operations represented as anonymous,
-- descriptions that clarify Platform vs Clinic scopes,
-- Swagger UI only in Development,
-- Swagger JSON available for contract tooling.
-
----
-
-## 21. Caching
-
-The application supports:
-
-- Memory cache,
-- Redis cache.
-
-Development defaults to Memory unless configured otherwise. Redis remains available for deployment scenarios.
-
-Tenant active/feature checks can use cache, with explicit invalidation after successful platform updates.
-
----
-
-## 22. Database and Migration Rules
-
-### Audit columns
-
-Domain audit scalar fields use:
-
-```text
-CreatedDate
-UpdatedDate
-CreateByUserId
-UpdatedByUserId
-```
-
-`CreateByUserId` and `UpdatedByUserId` are scalar audit identifiers, not mandatory physical foreign keys.
-
-### Enum persistence
-
-Enums are persisted as strings, not integers.
-
-### Delete behavior
-
-Domain relationships generally use restrictive delete behavior to avoid accidental cascaded tenant/business data loss.
-
-### PlatformClinicFoundation migration hardening
-
-The migration must preserve existing data safely, including:
-
-- rename old `IsSuperUser` to `IsClinicSuperUser` instead of losing the value,
-- existing Identity users become `AccountType = Clinic`,
-- existing permissions become `Scope = Clinic`,
-- existing clinics remain active,
-- legacy audit actor information is snapshotted before old actor relationships are removed,
-- legacy global roles are converted into clinic-scoped role copies,
-- `UserRole` and `RolePermission` mappings are remapped before non-null clinic foreign keys are enforced,
-- no `Guid.Empty` tenant FK placeholder strategy,
-- dangerous Down migrations must fail explicitly rather than silently collapsing distinct clinic-specific role data.
-
-### Migration policy
-
-Do not create unnecessary new migrations simply to compensate for an unfinished migration already under review. Harden the current migration in place until the model itself genuinely changes. If the EF model changes after that point, create the required new migration deliberately.
-
----
-
-## 23. Development / CI Expectations
-
-CI sequence:
-
-```text
-Setup .NET 10
-Restore
-Build
-Test
-Publish API
-```
-
-Temporary workflow logic that generates/commits migrations should not remain in the final production CI workflow after migrations are committed and reviewed.
-
-The repository targets the configured .NET 10 SDK through `global.json`.
-
----
-
-## 24. Important Security Findings from Manual Testing
-
-The current manual test process surfaced two important issues and drove design changes.
-
-### JWT looked valid but protected endpoints returned invalid_token
-
-Cause category: malformed Authorization header/token presentation rather than refresh-token generation itself.
-
-Resolution:
-
-- normalize Bearer header before validation,
-- keep cryptographic JWT validation fully enabled,
-- document Swagger behavior clearly.
-
-### Logout initially revoked only refresh token
-
-Observed behavior:
-
-```text
-Logout
-  -> old access token could still create a clinic
-```
-
-This is normal for purely stateless JWTs but did not satisfy the desired security contract.
-
-Resolution:
-
-- introduce server-side session validation using `session_id`,
-- revoke the session during logout,
-- revoke the previous session during refresh rotation,
-- validate session state on protected requests.
-
-Expected result now:
-
-```text
-Logout
-  -> old access token immediately rejected
-  -> old refresh token rejected
-```
-
----
-
-## 25. Historical Implementation Milestones
-
-Major completed foundations before/around the current PR include:
-
-- initial domain/entity model,
-- cache abstraction with Memory/Redis,
-- .NET 10 and CI foundation,
-- initial database migration,
-- Authentication/RBAC foundation,
-- Platform/Clinic actor separation,
+- Platform bootstrap,
+- Platform login,
 - clinic provisioning,
-- central audit foundation,
-- server-generated clinic code foundation,
-- static reference catalogs,
-- access-session revocation,
-- file-upload/storage foundation under the same PR review stream.
+- Clinic login/current-user flow,
+- multilingual permission catalog,
+- refresh rotation and old-session rejection,
+- logout revocation,
+- clinic suspension/resume,
+- Clinic Super User full effective permissions,
+- self-disable behavior,
+- tenant query isolation,
+- cross-clinic write rejection,
+- concurrent CodeCounter generation.
 
-Current active PR:
+Manual endpoint testing is intentionally left as the final verification activity after automated CI is green.
 
-```text
-PR #5
-feat: add clinic management, provisioning and audit foundation
-branch: feature/clinic-management-audit-foundation
-```
+## 20. Deferred work
 
-It remains intentionally open for review and manual verification.
+The foundation intentionally does not pre-build every future SaaS/product concern.
 
----
+Deferred until explicitly designed or required:
 
-## 26. Product Prototype Reference
+- subscription billing and plans,
+- owner billing portal,
+- cross-clinic account switching,
+- MFA and external identity providers,
+- support impersonation/break-glass clinical access,
+- distributed Redis caching,
+- appointments/branches unless promoted into an active feature scope,
+- future external lab/radiology/pharmacy integrations.
 
-An approved full-demo HTML prototype was produced during the design process:
+## 21. Merge position of PR #5 and PR #6
 
-```text
-Clinic_Management_V1_Full_Demo_Prototype_v9.html
-```
+PR #6 (`fix/foundation-hardening`) is the continuation/superset of the clinic-management/audit foundation work from PR #5. The hardening branch contains the PR #5 foundation plus the security, data-model, migration, permission, route, caching, and automated-test corrections described here.
 
-This prototype is a design reference and should not override backend security/data-ownership rules documented here.
-
----
-
-## 27. Next Recommended Verification Sequence
-
-Before merging the current foundation PR, verify in order:
-
-1. Database migration on a fresh DB.
-2. Database migration against realistic existing clinic/user/role/audit data.
-3. Platform bootstrap.
-4. Platform login.
-5. Platform protected endpoint with access token.
-6. Refresh rotation and immediate old-session revocation.
-7. Logout and immediate access-token revocation.
-8. Create clinic using only `CodePrefix`.
-9. Verify generated clinic code and counter concurrency.
-10. Verify complete provisioning graph.
-11. Reference-data endpoints and validation.
-12. Clinic login and own-clinic self-service.
-13. Clinic/Platform scope isolation.
-14. Clinic suspend/reactivate behavior.
-15. Feature enable/disable and cache invalidation.
-16. File-upload session create/upload/complete/download flow.
-17. Cross-clinic file isolation.
-18. Audit redaction and visibility.
-19. Swagger/OpenAPI operation IDs and anonymous/protected metadata.
-20. Final CI: Restore, Build, Test, Publish.
-
----
-
-## 28. Non-Negotiable Design Rules
-
-These rules should remain stable unless deliberately revisited:
-
-1. One backend and one frontend for all clinic tenants.
-2. Tenant separation is enforced server-side using authenticated clinic context.
-3. Platform and Clinic security scopes are separate.
-4. Clinic Super User does not mean Platform Admin.
-5. Platform Admin does not automatically mean clinical-data access.
-6. Business codes are server-generated; the client controls only approved prefix/configuration.
-7. Stable dropdown/reference data does not require DB tables in V1.
-8. Business entities reference files by stable FileId, not by trusting arbitrary client URLs.
-9. Storage provider is abstracted so Local and S3 can use the same frontend/business contract.
-10. Audit is central, append-only and tenant-aware.
-11. Sensitive values never belong in audit metadata.
-12. Enums persisted to SQL use string values.
-13. Logout and refresh revoke active sessions immediately.
-14. Feature entitlement and user permission are separate concerns.
-15. The current PR remains unmerged until explicitly approved.
+The PRs must not both be merged independently when that would duplicate the same work. PR #6 is the branch intended to carry the final hardened foundation once CI and review gates are satisfied.
