@@ -1,5 +1,6 @@
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Users;
+using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +14,7 @@ public sealed class UserAccountService(
         UpdateUserStatusRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetCurrentActor(out var currentUserId, out _))
+        if (!TryGetCurrentActor(out var currentUserId))
             return new UserAccountStatusResult(UserAccountStatusOutcome.Unauthenticated);
 
         var target = await dbContext.Users
@@ -30,7 +31,7 @@ public sealed class UserAccountService(
     public async Task<UserAccountStatusResult> DisableCurrentAsync(
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetCurrentActor(out var currentUserId, out _))
+        if (!TryGetCurrentActor(out var currentUserId))
             return new UserAccountStatusResult(UserAccountStatusOutcome.Unauthenticated);
 
         var currentUser = await dbContext.Users
@@ -42,7 +43,7 @@ public sealed class UserAccountService(
     }
 
     private async Task<UserAccountStatusResult> ApplyStatusAsync(
-        Domain.Entities.User user,
+        User user,
         bool isActive,
         Guid changedByUserId,
         CancellationToken cancellationToken)
@@ -71,19 +72,17 @@ public sealed class UserAccountService(
             new UserAccountStatusResponse(user.Id, user.IsActive));
     }
 
-    private bool TryGetCurrentActor(out Guid userId, out Guid clinicId)
+    private bool TryGetCurrentActor(out Guid userId)
     {
         if (currentUserContext.IsAuthenticated &&
             currentUserContext.UserId is Guid currentUserId &&
-            currentUserContext.ClinicId is Guid currentClinicId)
+            currentUserContext.ClinicId.HasValue)
         {
             userId = currentUserId;
-            clinicId = currentClinicId;
             return true;
         }
 
         userId = Guid.Empty;
-        clinicId = Guid.Empty;
         return false;
     }
 }
