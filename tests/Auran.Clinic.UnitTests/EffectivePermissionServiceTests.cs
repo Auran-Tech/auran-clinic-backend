@@ -1,4 +1,5 @@
 using Auran.Clinic.Application.Abstractions;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -9,13 +10,13 @@ namespace Auran.Clinic.UnitTests;
 public sealed class EffectivePermissionServiceTests
 {
     [Fact]
-    public async Task SuperUser_ReturnsAllBackendPermissionsWithoutRoleAssignments()
+    public async Task SuperUser_ReturnsOnlyKnownBackendPermissionsWithoutRoleAssignments()
     {
         await using var context = CreateContext();
         context.Permissions.AddRange(
-            CreatePermission("Settings.Manage"),
-            CreatePermission("Patients.View"),
-            CreatePermission("Users.Manage"));
+            CreatePermission(Permissions.Patients.View),
+            CreatePermission(Permissions.Users.ManageStatus),
+            CreatePermission("Legacy_Unknown_Permission"));
         await context.SaveChangesAsync();
 
         var service = new EffectivePermissionService(context);
@@ -24,25 +25,27 @@ public sealed class EffectivePermissionServiceTests
             roleIds: Array.Empty<Guid>());
 
         Assert.Equal(
-            ["Patients.View", "Settings.Manage", "Users.Manage"],
+            [Permissions.Patients.View, Permissions.Users.ManageStatus],
             permissions);
     }
 
     [Fact]
-    public async Task RegularUser_ReturnsDistinctPermissionsFromAssignedRolesOnly()
+    public async Task RegularUser_ReturnsDistinctKnownPermissionsFromAssignedRolesOnly()
     {
         await using var context = CreateContext();
-        var patientView = CreatePermission("Patients.View");
-        var userManage = CreatePermission("Users.Manage");
-        var settingsManage = CreatePermission("Settings.Manage");
+        var patientView = CreatePermission(Permissions.Patients.View);
+        var userManage = CreatePermission(Permissions.Users.Manage);
+        var settingsManage = CreatePermission(Permissions.Settings.Manage);
+        var unknown = CreatePermission("Legacy_Unknown_Permission");
         var roleA = Guid.NewGuid();
         var roleB = Guid.NewGuid();
         var unassignedRole = Guid.NewGuid();
 
-        context.Permissions.AddRange(patientView, userManage, settingsManage);
+        context.Permissions.AddRange(patientView, userManage, settingsManage, unknown);
         context.RolePermissions.AddRange(
             new RolePermission { RoleId = roleA, PermissionId = patientView.Id },
             new RolePermission { RoleId = roleA, PermissionId = userManage.Id },
+            new RolePermission { RoleId = roleA, PermissionId = unknown.Id },
             new RolePermission { RoleId = roleB, PermissionId = patientView.Id },
             new RolePermission { RoleId = unassignedRole, PermissionId = settingsManage.Id });
         await context.SaveChangesAsync();
@@ -52,14 +55,14 @@ public sealed class EffectivePermissionServiceTests
             isSuperUser: false,
             roleIds: [roleA, roleB]);
 
-        Assert.Equal(["Patients.View", "Users.Manage"], permissions);
+        Assert.Equal([Permissions.Patients.View, Permissions.Users.Manage], permissions);
     }
 
     [Fact]
     public async Task RegularUserWithoutRoles_ReturnsNoPermissions()
     {
         await using var context = CreateContext();
-        context.Permissions.Add(CreatePermission("Patients.View"));
+        context.Permissions.Add(CreatePermission(Permissions.Patients.View));
         await context.SaveChangesAsync();
 
         var service = new EffectivePermissionService(context);

@@ -6,10 +6,7 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
     {
-        var isSuperUser = context.User.HasClaim("super_user", "true");
-        var hasPermission = context.User.HasClaim("permission", requirement.Permission);
-
-        if (isSuperUser || hasPermission)
+        if (context.User.HasClaim("permission", requirement.Permission))
             context.Succeed(requirement);
 
         return Task.CompletedTask;

@@ -11,10 +11,15 @@ public sealed class EffectivePermissionService(AuranClinicDbContext dbContext) :
         IReadOnlyCollection<Guid> roleIds,
         CancellationToken cancellationToken = default)
     {
+        var knownPermissionKeys = SystemPermissionCatalog.All
+            .Select(definition => definition.Key)
+            .ToArray();
+
         if (isSuperUser)
         {
             return await dbContext.Permissions
                 .AsNoTracking()
+                .Where(permission => knownPermissionKeys.Contains(permission.Code))
                 .Select(permission => permission.Code)
                 .Distinct()
                 .OrderBy(code => code)
@@ -28,7 +33,8 @@ public sealed class EffectivePermissionService(AuranClinicDbContext dbContext) :
                 from rolePermission in dbContext.RolePermissions.AsNoTracking()
                 join permission in dbContext.Permissions.AsNoTracking()
                     on rolePermission.PermissionId equals permission.Id
-                where roleIds.Contains(rolePermission.RoleId)
+                where roleIds.Contains(rolePermission.RoleId) &&
+                      knownPermissionKeys.Contains(permission.Code)
                 select permission.Code)
             .Distinct()
             .OrderBy(code => code)
