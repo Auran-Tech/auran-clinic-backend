@@ -12,5 +12,11 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         builder.HasIndex(x => x.TokenHash).IsUnique();
         builder.HasIndex(x => new { x.ClinicId, x.UserId, x.ExpiresDate });
         builder.Ignore(x => x.IsActive);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(token => new { token.UserId, token.ClinicId })
+            .HasPrincipalKey(user => new { user.Id, user.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
