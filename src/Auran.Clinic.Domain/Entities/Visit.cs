@@ -16,5 +16,5 @@ public class Visit : ClinicEntity
     public string? Diagnosis { get; set; }
     public string? Notes { get; set; }
     public string? TreatmentPlan { get; set; }
-    public string? FollowUpText { get; set; }
+    public byte[] RowVersion { get; set; } = [];
 }

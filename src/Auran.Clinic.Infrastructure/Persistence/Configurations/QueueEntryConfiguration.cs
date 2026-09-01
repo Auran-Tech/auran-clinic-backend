@@ -8,7 +8,7 @@ public class QueueEntryConfiguration : IEntityTypeConfiguration<QueueEntry>
 {
     public void Configure(EntityTypeBuilder<QueueEntry> builder)
     {
-        builder.HasIndex(x => new { x.ClinicId, x.VisitId });
+        builder.HasIndex(x => new { x.ClinicId, x.VisitId }).IsUnique();
         builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
