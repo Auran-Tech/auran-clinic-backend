@@ -104,6 +104,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
+        services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddScoped<AccessTokenStateValidator>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
