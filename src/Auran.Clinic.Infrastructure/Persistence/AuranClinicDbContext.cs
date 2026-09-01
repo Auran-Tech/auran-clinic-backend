@@ -12,7 +12,7 @@ namespace Auran.Clinic.Infrastructure.Persistence;
 public class AuranClinicDbContext(
     DbContextOptions<AuranClinicDbContext> options,
     ICurrentUserContext currentUserContext)
-    : IdentityDbContext<ApplicationIdentityUser>(options)
+    : IdentityUserContext<ApplicationIdentityUser>(options)
 {
     private static readonly MethodInfo ApplyClinicQueryFilterMethod = typeof(AuranClinicDbContext)
         .GetMethod(nameof(ApplyClinicQueryFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -22,10 +22,10 @@ public class AuranClinicDbContext(
 
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
     public new DbSet<User> Users => Set<User>();
-    public new DbSet<Role> Roles => Set<Role>();
+    public DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<PermissionTranslation> PermissionTranslations => Set<PermissionTranslation>();
-    public new DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Patient> Patients => Set<Patient>();
