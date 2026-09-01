@@ -26,6 +26,8 @@ public static class DependencyInjection
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             services.AddDbContext<AuranClinicDbContext>(options => options.UseSqlServer(connectionString));
+            services.AddScoped<PermissionCatalogInitializer>();
+            services.AddHostedService<PermissionCatalogHostedService>();
         }
 
         services.AddIdentityCore<ApplicationIdentityUser>(options =>
