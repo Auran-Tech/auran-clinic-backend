@@ -23,12 +23,8 @@ public static class DomainRelationshipConfiguration
             .HasForeignKey<User>(x => x.IdentityUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<UserRole>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.UserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+        // UserRole -> User and RefreshToken -> User are tenant-safe composite relationships
+        // configured by their dedicated entity configurations.
         modelBuilder.Entity<UserRole>()
             .HasOne<Role>()
             .WithMany()
@@ -47,13 +43,8 @@ public static class DomainRelationshipConfiguration
             .HasForeignKey(x => x.PermissionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<RefreshToken>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.UserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        ConfigurePatientRelationships(modelBuilder);
+        // Patient/profile/file relationships that cross clinic-owned entities are configured
+        // centrally by PatientTenantIntegrityConfiguration using composite tenant foreign keys.
         ConfigureClinicalRelationships(modelBuilder);
         ConfigureWorkflowRelationships(modelBuilder);
         ConfigureVisitRelationships(modelBuilder);
@@ -100,70 +91,6 @@ public static class DomainRelationshipConfiguration
             .HasOne<ClinicEntityType>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
-            .OnDelete(DeleteBehavior.Restrict);
-    }
-
-    private static void ConfigurePatientRelationships(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<PatientCondition>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientCondition>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientAllergy>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientAllergy>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientMedication>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientMedication>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientProfileField>()
-            .HasOne<PatientProfileSection>()
-            .WithMany()
-            .HasForeignKey(x => x.SectionId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientProfileFieldOption>()
-            .HasOne<PatientProfileField>()
-            .WithMany()
-            .HasForeignKey(x => x.FieldId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<PatientProfileField>()
-            .WithMany()
-            .HasForeignKey(x => x.FieldId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientProfileValue>()
-            .HasOne<FileRecord>()
-            .WithMany()
-            .HasForeignKey(x => x.FileId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 
@@ -355,23 +282,8 @@ public static class DomainRelationshipConfiguration
 
     private static void ConfigureFileRelationships(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<FileRecord>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.UploadedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<PatientAttachment>()
-            .HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(x => x.PatientId)
-            .OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<PatientAttachment>()
-            .HasOne<FileRecord>()
-            .WithMany()
-            .HasForeignKey(x => x.FileId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+        // FileRecord uploader and PatientAttachment ownership are tenant-safe composite
+        // relationships configured by PatientTenantIntegrityConfiguration.
         modelBuilder.Entity<AuditLog>()
             .HasOne<User>()
             .WithMany()
