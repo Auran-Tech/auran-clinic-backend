@@ -21,20 +21,47 @@ public sealed class PatientTenantIntegrityConfiguration :
 
     public void Configure(EntityTypeBuilder<PatientCondition> builder)
     {
-        ConfigurePatientRelationship(builder, condition => condition.PatientId);
-        ConfigureUserRelationship(builder, condition => condition.RecordedByUserId);
+        builder.HasOne<Patient>()
+            .WithMany()
+            .HasForeignKey(condition => new { condition.PatientId, condition.ClinicId })
+            .HasPrincipalKey(patient => new { patient.Id, patient.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(condition => new { condition.RecordedByUserId, condition.ClinicId })
+            .HasPrincipalKey(user => new { user.Id, user.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     public void Configure(EntityTypeBuilder<PatientAllergy> builder)
     {
-        ConfigurePatientRelationship(builder, allergy => allergy.PatientId);
-        ConfigureUserRelationship(builder, allergy => allergy.RecordedByUserId);
+        builder.HasOne<Patient>()
+            .WithMany()
+            .HasForeignKey(allergy => new { allergy.PatientId, allergy.ClinicId })
+            .HasPrincipalKey(patient => new { patient.Id, patient.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(allergy => new { allergy.RecordedByUserId, allergy.ClinicId })
+            .HasPrincipalKey(user => new { user.Id, user.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     public void Configure(EntityTypeBuilder<PatientMedication> builder)
     {
-        ConfigurePatientRelationship(builder, medication => medication.PatientId);
-        ConfigureUserRelationship(builder, medication => medication.RecordedByUserId);
+        builder.HasOne<Patient>()
+            .WithMany()
+            .HasForeignKey(medication => new { medication.PatientId, medication.ClinicId })
+            .HasPrincipalKey(patient => new { patient.Id, patient.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(medication => new { medication.RecordedByUserId, medication.ClinicId })
+            .HasPrincipalKey(user => new { user.Id, user.ClinicId })
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     public void Configure(EntityTypeBuilder<PatientProfileSection> builder) =>
@@ -104,32 +131,6 @@ public sealed class PatientTenantIntegrityConfiguration :
             .WithMany()
             .HasForeignKey(attachment => new { attachment.FileId, attachment.ClinicId })
             .HasPrincipalKey(file => new { file.Id, file.ClinicId })
-            .OnDelete(DeleteBehavior.Restrict);
-    }
-
-    private static void ConfigurePatientRelationship<TEntity>(
-        EntityTypeBuilder<TEntity> builder,
-        System.Linq.Expressions.Expression<Func<TEntity, Guid>> patientId)
-        where TEntity : ClinicEntity
-    {
-        var patientProperty = patientId.GetMemberAccess();
-        builder.HasOne<Patient>()
-            .WithMany()
-            .HasForeignKey(patientProperty, builder.Metadata.FindProperty(nameof(ClinicEntity.ClinicId))!)
-            .HasPrincipalKey<Patient>(nameof(Patient.Id), nameof(ClinicEntity.ClinicId))
-            .OnDelete(DeleteBehavior.Restrict);
-    }
-
-    private static void ConfigureUserRelationship<TEntity>(
-        EntityTypeBuilder<TEntity> builder,
-        System.Linq.Expressions.Expression<Func<TEntity, Guid>> userId)
-        where TEntity : ClinicEntity
-    {
-        var userProperty = userId.GetMemberAccess();
-        builder.HasOne<User>()
-            .WithMany()
-            .HasForeignKey(userProperty, builder.Metadata.FindProperty(nameof(ClinicEntity.ClinicId))!)
-            .HasPrincipalKey<User>(nameof(User.Id), nameof(ClinicEntity.ClinicId))
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
