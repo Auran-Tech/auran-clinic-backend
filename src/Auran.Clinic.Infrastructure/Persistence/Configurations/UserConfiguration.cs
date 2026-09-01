@@ -11,5 +11,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.IsActive)
             .HasDefaultValue(true)
             .IsRequired();
+
+        // Candidate key used by tenant-safe composite foreign keys. Id remains the primary key.
+        builder.HasAlternateKey(user => new { user.Id, user.ClinicId });
     }
 }
