@@ -10,6 +10,33 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(
+                """
+                IF EXISTS (
+                    SELECT 1
+                    FROM [RefreshTokens] AS rt
+                    LEFT JOIN [Users] AS u
+                        ON u.[Id] = rt.[UserId]
+                        AND u.[ClinicId] = rt.[ClinicId]
+                    WHERE u.[Id] IS NULL
+                )
+                BEGIN
+                    THROW 51001, 'Cannot enforce refresh-token tenant ownership because cross-clinic user references exist.', 1;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [UserRoles] AS ur
+                    LEFT JOIN [Users] AS u
+                        ON u.[Id] = ur.[UserId]
+                        AND u.[ClinicId] = ur.[ClinicId]
+                    WHERE u.[Id] IS NULL
+                )
+                BEGIN
+                    THROW 51002, 'Cannot enforce user-role tenant ownership because cross-clinic user references exist.', 1;
+                END;
+                """);
+
             migrationBuilder.DropIndex(
                 name: "IX_UserRoles_UserId",
                 table: "UserRoles");
