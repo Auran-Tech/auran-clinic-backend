@@ -8,8 +8,13 @@ public sealed class PermissionCatalogService(AuranClinicDbContext dbContext) : I
 {
     public async Task<List<PermissionCatalogResponse>> GetAsync(CancellationToken cancellationToken = default)
     {
+        var knownKeys = SystemPermissionCatalog.All
+            .Select(definition => definition.Key)
+            .ToArray();
+
         var permissions = await dbContext.Permissions
             .AsNoTracking()
+            .Where(permission => knownKeys.Contains(permission.Code))
             .OrderBy(permission => permission.Group)
             .ThenBy(permission => permission.Code)
             .Select(permission => new
@@ -33,17 +38,22 @@ public sealed class PermissionCatalogService(AuranClinicDbContext dbContext) : I
                     translation.Description))
                 .ToListAsync(cancellationToken);
 
+        var translationsByPermission = translations
+            .GroupBy(translation => translation.PermissionId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToDictionary(
+                    translation => translation.LanguageCode,
+                    translation => translation.Description,
+                    StringComparer.OrdinalIgnoreCase));
+
         return permissions
             .Select(permission => new PermissionCatalogResponse
             {
                 Key = permission.Code,
                 Group = permission.Group,
-                Descriptions = translations
-                    .Where(translation => translation.PermissionId == permission.Id)
-                    .ToDictionary(
-                        translation => translation.LanguageCode,
-                        translation => translation.Description,
-                        StringComparer.OrdinalIgnoreCase)
+                Descriptions = translationsByPermission.GetValueOrDefault(permission.Id)
+                    ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             })
             .ToList();
     }
