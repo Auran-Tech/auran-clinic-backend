@@ -4,6 +4,7 @@ using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AuranClinicDbContext))]
-    partial class AuranClinicDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901143158_EnforcePatientTenantForeignKeys")]
+    partial class EnforcePatientTenantForeignKeys
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2084,6 +2087,12 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Auran.Clinic.Domain.Entities.User", null)
                         .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
                         .HasForeignKey("UploadedByUserId", "ClinicId")
                         .HasPrincipalKey("Id", "ClinicId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2136,6 +2145,18 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
                         .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
+                        .WithMany()
                         .HasForeignKey("PatientId", "ClinicId")
                         .HasPrincipalKey("Id", "ClinicId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2154,6 +2175,18 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
                         .WithMany()
                         .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.FileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2182,6 +2215,18 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
                         .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
+                        .WithMany()
                         .HasForeignKey("PatientId", "ClinicId")
                         .HasPrincipalKey("Id", "ClinicId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2200,6 +2245,18 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
                         .WithMany()
                         .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2228,6 +2285,12 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Auran.Clinic.Domain.Entities.PatientProfileSection", null)
                         .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.PatientProfileSection", null)
+                        .WithMany()
                         .HasForeignKey("SectionId", "ClinicId")
                         .HasPrincipalKey("Id", "ClinicId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2239,6 +2302,12 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
                         .WithMany()
                         .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.PatientProfileField", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2264,6 +2333,23 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.Clinic", null)
                         .WithMany()
                         .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.PatientProfileField", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.FileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2371,6 +2457,12 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Auran.Clinic.Domain.Entities.User", null)
                         .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId", "ClinicId")
                         .HasPrincipalKey("Id", "ClinicId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2418,6 +2510,12 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasOne("Auran.Clinic.Domain.Entities.Role", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
