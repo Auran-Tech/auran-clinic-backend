@@ -2,13 +2,19 @@ using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Auran.Clinic.Infrastructure.Authorization;
 
 public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
 {
+    private const string InitializationLockName = "Auran.PermissionCatalog.Initialization";
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await AcquireInitializationLockAsync(cancellationToken);
+
         var definitions = SystemPermissionCatalog.All;
         var knownCodes = definitions
             .SelectMany(definition => new[] { definition.Key, definition.LegacyKey })
@@ -81,6 +87,30 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task AcquireInitializationLockAsync(CancellationToken cancellationToken)
+    {
+        var transaction = dbContext.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("Permission catalog initialization requires an active transaction.");
+
+        await using var command = dbContext.Database.GetDbConnection().CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandText = """
+            DECLARE @result int;
+            EXEC @result = sys.sp_getapplock
+                @Resource = N'Auran.PermissionCatalog.Initialization',
+                @LockMode = 'Exclusive',
+                @LockOwner = 'Transaction',
+                @LockTimeout = 30000;
+            SELECT @result;
+            """;
+
+        var result = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+        if (result < 0)
+            throw new InvalidOperationException(
+                $"Could not acquire permission catalog initialization lock '{InitializationLockName}'. SQL Server result: {result}.");
     }
 
     private void MergeLegacyPermission(
