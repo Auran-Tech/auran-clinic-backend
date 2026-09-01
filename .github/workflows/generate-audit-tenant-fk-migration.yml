@@ -1,0 +1,46 @@
+name: Generate Audit Tenant FK Migration
+
+on:
+  push:
+    branches: [ schema/audit-tenant-foreign-key ]
+
+permissions:
+  contents: write
+
+jobs:
+  generate-migration:
+    if: ${{ !contains(github.event.head_commit.message, '[skip migration-generator]') }}
+    runs-on: ubuntu-latest
+
+    env:
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=AuranClinicMigrationGeneration;User Id=sa;Password=NotUsed_123!;TrustServerCertificate=True;Encrypt=False
+      Jwt__SigningKey: Auran_Migration_Generation_JWT_Key_Not_A_Secret_2026
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: schema/audit-tenant-foreign-key
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore
+        run: dotnet restore Auran.Clinic.sln
+      - name: Generate migration
+        run: >-
+          dotnet ef migrations add EnforceAuditTenantForeignKey
+          --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj
+          --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj
+          --output-dir Persistence/Migrations
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
+          git commit -m "chore: generate audit tenant FK migration [skip migration-generator]"
+          git push origin HEAD:schema/audit-tenant-foreign-key
