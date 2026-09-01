@@ -46,7 +46,7 @@ public static class DomainRelationshipConfiguration
         // Patient/profile/file relationships are configured by PatientTenantIntegrityConfiguration.
         // Workflow, queue, visit and clinical-order relationships are configured by
         // WorkflowVisitTenantIntegrityConfiguration using composite tenant foreign keys.
-        ConfigureFileRelationships(modelBuilder);
+        // AuditLog -> User is configured by AuditLogConfiguration using a composite tenant FK.
     }
 
     private static void ConfigureClinicRelationships(ModelBuilder modelBuilder)
@@ -89,17 +89,6 @@ public static class DomainRelationshipConfiguration
             .HasOne<ClinicEntityType>()
             .WithMany()
             .HasForeignKey(x => x.ClinicId)
-            .OnDelete(DeleteBehavior.Restrict);
-    }
-
-    private static void ConfigureFileRelationships(ModelBuilder modelBuilder)
-    {
-        // FileRecord uploader and PatientAttachment ownership are tenant-safe composite
-        // relationships configured by PatientTenantIntegrityConfiguration.
-        modelBuilder.Entity<AuditLog>()
-            .HasOne<User>()
-            .WithMany()
-            .HasForeignKey(x => x.ActorUserId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
