@@ -10,6 +10,16 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(
+                """
+                IF EXISTS (SELECT 1 FROM [AspNetRoles])
+                   OR EXISTS (SELECT 1 FROM [AspNetRoleClaims])
+                   OR EXISTS (SELECT 1 FROM [AspNetUserRoles])
+                BEGIN
+                    ;THROW 51000, 'Unused ASP.NET Identity role tables contain data. Migrate or remove that data explicitly before applying this migration.', 1;
+                END
+                """);
+
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
