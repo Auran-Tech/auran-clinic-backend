@@ -1,5 +1,4 @@
 using Auran.Clinic.Domain.Entities;
-using Auran.Clinic.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using ClinicEntityType = Auran.Clinic.Domain.Entities.Clinic;
 
@@ -17,12 +16,7 @@ public static class DomainRelationshipConfiguration
             .HasForeignKey<ClinicSettings>(x => x.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<User>()
-            .HasOne<ApplicationIdentityUser>()
-            .WithOne()
-            .HasForeignKey<User>(x => x.IdentityUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
+        // User -> Identity is configured by UserConfiguration with the account-type discriminator.
         // UserRole -> User and RefreshToken -> User are tenant-safe composite relationships
         // configured by their dedicated entity configurations.
         modelBuilder.Entity<UserRole>()
