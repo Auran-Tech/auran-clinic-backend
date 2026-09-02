@@ -50,6 +50,7 @@ public sealed class WorkflowVisitTenantForeignKeyTests(ApiFactory factory) : ICl
         var localDoctor = await CreateUserAsync(dbContext, userManager, clinicB.Id, "local-queue-doctor");
         var localPatient = await CreatePatientAsync(dbContext, clinicB.Id, "queue-patient");
         var localVisit = await CreateVisitAsync(dbContext, clinicB.Id, localPatient.Id, localDoctor.Id);
+        var crossClinicDoctorVisit = await CreateVisitAsync(dbContext, clinicB.Id, localPatient.Id, localDoctor.Id);
         var localStatus = await CreateWorkflowStatusAsync(dbContext, clinicB.Id, "WAITING");
 
         var nullDoctorRows = await InsertQueueEntryAsync(
@@ -58,7 +59,7 @@ public sealed class WorkflowVisitTenantForeignKeyTests(ApiFactory factory) : ICl
 
         var exception = await Assert.ThrowsAsync<SqlException>(() =>
             InsertQueueEntryAsync(
-                dbContext, clinicB.Id, localPatient.Id, localVisit.Id, foreignDoctor.Id, localStatus.Id));
+                dbContext, clinicB.Id, localPatient.Id, crossClinicDoctorVisit.Id, foreignDoctor.Id, localStatus.Id));
 
         Assert.Equal(547, exception.Number);
         Assert.Contains("FK_QueueEntries_Users_DoctorId_ClinicId", exception.Message, StringComparison.Ordinal);
