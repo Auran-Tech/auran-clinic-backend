@@ -13,6 +13,7 @@ using Auran.Clinic.Infrastructure.Caching;
 using Auran.Clinic.Infrastructure.Codes;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
+using Auran.Clinic.Infrastructure.Platform;
 using Auran.Clinic.Infrastructure.Users;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -35,7 +36,12 @@ public static class DependencyInjection
             services.AddDbContext<AuranClinicDbContext>(options => options.UseSqlServer(connectionString));
             services.AddScoped<PermissionCatalogInitializer>();
             services.AddHostedService<PermissionCatalogHostedService>();
+            services.AddScoped<PlatformBootstrapService>();
+            services.AddHostedService<PlatformBootstrapHostedService>();
         }
+
+        services.Configure<PlatformBootstrapOptions>(
+            configuration.GetSection(PlatformBootstrapOptions.SectionName));
 
         services.AddIdentityCore<ApplicationIdentityUser>(options =>
         {
