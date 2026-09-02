@@ -8,6 +8,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = ActorPolicies.Clinic)]
 [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Audit.View)]
 [Route("api/audit-logs")]
 [Produces("application/json")]
