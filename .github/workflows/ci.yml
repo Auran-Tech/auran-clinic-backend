@@ -40,8 +40,8 @@ jobs:
       - name: Restore
         run: dotnet restore Auran.Clinic.sln
 
-      - name: Build
-        run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
+      - name: Build with warnings as errors
+        run: dotnet build Auran.Clinic.sln --configuration Release --no-restore -warnaserror
 
       - name: Apply migrations to SQL Server
         shell: bash
