@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-test:
@@ -43,6 +43,27 @@ jobs:
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
+      - name: Generate pending EF migration
+        if: github.event_name == 'pull_request' && github.head_ref == 'foundation/code-counter'
+        shell: bash
+        run: |
+          dotnet ef migrations add CodeCounterFoundation \
+            --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+            --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
+            --configuration Release \
+            --no-build
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
+
+          if git diff --cached --quiet; then
+            echo "No migration files were generated."
+          else
+            git commit -m "schema: generate code counter migration"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
+
       - name: Apply migrations to SQL Server
         shell: bash
         run: |
@@ -54,11 +75,9 @@ jobs:
               --no-build; then
               exit 0
             fi
-
             echo "SQL Server not ready yet (attempt ${attempt}/30)."
             sleep 2
           done
-
           echo "Database migration failed after all retries."
           exit 1
 
