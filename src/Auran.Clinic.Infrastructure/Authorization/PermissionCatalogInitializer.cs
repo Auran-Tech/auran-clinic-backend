@@ -86,8 +86,88 @@ public sealed class PermissionCatalogInitializer(AuranClinicDbContext dbContext)
             UpsertTranslation(current, "ar", definition.ArabicDescription, translations, now);
         }
 
+        await EnsureSystemRolesAsync(permissions, rolePermissions, now, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task EnsureSystemRolesAsync(
+        List<Permission> permissions,
+        List<RolePermission> rolePermissions,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var roleCodes = SystemRoleCatalog.All.Select(role => role.Code).ToArray();
+        var roles = await dbContext.Roles
+            .Where(role => roleCodes.Contains(role.Code))
+            .ToListAsync(cancellationToken);
+
+        var roleIds = roles.Select(role => role.Id).ToArray();
+        var existingMappings = roleIds.Length == 0
+            ? new List<RolePermission>()
+            : await dbContext.RolePermissions
+                .Where(mapping => roleIds.Contains(mapping.RoleId))
+                .ToListAsync(cancellationToken);
+
+        foreach (var roleDefinition in SystemRoleCatalog.All)
+        {
+            var role = roles.SingleOrDefault(item => item.Code == roleDefinition.Code);
+            if (role is null)
+            {
+                role = new Role
+                {
+                    Id = Guid.NewGuid(),
+                    Code = roleDefinition.Code,
+                    Name = roleDefinition.Name,
+                    IsSystem = true,
+                    CreatedDate = now
+                };
+                dbContext.Roles.Add(role);
+                roles.Add(role);
+            }
+            else
+            {
+                role.Name = roleDefinition.Name;
+                role.IsSystem = true;
+                role.UpdatedDate = now;
+            }
+
+            var desiredPermissionIds = roleDefinition.Permissions
+                .Select(code => permissions.Single(permission => permission.Code == code).Id)
+                .ToHashSet();
+
+            foreach (var permissionId in desiredPermissionIds)
+            {
+                if (existingMappings.Any(mapping =>
+                        mapping.RoleId == role.Id && mapping.PermissionId == permissionId))
+                {
+                    continue;
+                }
+
+                var mapping = new RolePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = role.Id,
+                    PermissionId = permissionId,
+                    CreatedDate = now
+                };
+                dbContext.RolePermissions.Add(mapping);
+                existingMappings.Add(mapping);
+                rolePermissions.Add(mapping);
+            }
+
+            foreach (var obsolete in existingMappings
+                         .Where(mapping =>
+                             mapping.RoleId == role.Id &&
+                             permissions.Any(permission => permission.Id == mapping.PermissionId) &&
+                             !desiredPermissionIds.Contains(mapping.PermissionId))
+                         .ToList())
+            {
+                dbContext.RolePermissions.Remove(obsolete);
+                existingMappings.Remove(obsolete);
+                rolePermissions.Remove(obsolete);
+            }
+        }
     }
 
     private async Task AcquireInitializationLockAsync(CancellationToken cancellationToken)
