@@ -52,6 +52,32 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
         Assert.Contains("rate_limit_exceeded", body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Login_UsesTrustedForwardedClientIpForRateLimitPartition()
+    {
+        using var client = CreateHttpsClient();
+        var payload = new
+        {
+            Email = "forwarded-rate-limit-test@example.invalid",
+            Password = "InvalidPassword123"
+        };
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            using var request = CreateLoginRequest(payload, "198.51.100.10");
+            using var response = await client.SendAsync(request);
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
+        }
+
+        using var rejectedRequest = CreateLoginRequest(payload, "198.51.100.10");
+        using var rejectedResponse = await client.SendAsync(rejectedRequest);
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejectedResponse.StatusCode);
+
+        using var differentClientRequest = CreateLoginRequest(payload, "198.51.100.11");
+        using var differentClientResponse = await client.SendAsync(differentClientRequest);
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, differentClientResponse.StatusCode);
+    }
+
     private HttpClient CreateHttpsClient()
     {
         return factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
@@ -65,6 +91,17 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/auth/login");
         request.Headers.Add("Origin", origin);
         request.Headers.Add("Access-Control-Request-Method", "POST");
+        return request;
+    }
+
+    private static HttpRequestMessage CreateLoginRequest(object payload, string forwardedClientIp)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+        {
+            Content = JsonContent.Create(payload)
+        };
+        request.Headers.Add("X-Forwarded-For", forwardedClientIp);
+        request.Headers.Add("X-Forwarded-Proto", "https");
         return request;
     }
 }
