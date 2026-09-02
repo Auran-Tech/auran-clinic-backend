@@ -5,6 +5,7 @@ public enum UserAccountStatusOutcome
     Success,
     NotFound,
     Forbidden,
+    Conflict,
     Unauthenticated
 }
 
