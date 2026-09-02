@@ -124,6 +124,24 @@ public sealed class UserAccountStatusApiTests
     }
 
     [Fact]
+    public async Task DisableSelf_LastActiveSuperUser_ReturnsConflictAndKeepsAccountActive()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateAccountAsync(factory, clinicId, isSuperUser: true);
+        using var client = factory.CreateClient();
+        await AuthenticateAsync(client, account.Credentials);
+
+        var response = await client.PostAsync("/api/users/disable-self", content: null);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("last_superuser_required", body, StringComparison.Ordinal);
+        Assert.True(await GetUserIsActiveAsync(factory, account.UserId));
+        Assert.True(await HasUnrevokedSessionAsync(factory, account.UserId));
+    }
+
+    [Fact]
     public async Task SetStatus_CrossClinicTarget_ReturnsNotFound()
     {
         await using var factory = new ApiFactory();
