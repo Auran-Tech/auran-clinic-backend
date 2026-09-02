@@ -46,7 +46,7 @@ jobs:
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
       - name: Generate pending EF migration
-        if: github.event_name == 'pull_request' && github.head_ref == 'foundation/code-counter'
+        if: github.event_name == 'pull_request' && github.head_ref == 'foundation/code-counter-generated'
         shell: bash
         run: |
           dotnet ef migrations add CodeCounterFoundation \
