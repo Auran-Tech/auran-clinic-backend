@@ -26,16 +26,17 @@ public sealed class CodeGeneratorService(
         if (scope == CodeScope.Clinic && currentUserContext.IsAuthenticated && currentUserContext.ClinicId != clinicId)
             throw new InvalidOperationException("Cross-clinic code generation is not allowed.");
 
-        var year = DateTime.UtcNow.Year;
         var now = DateTime.UtcNow;
+        var year = now.Year;
         var actorId = currentUserContext.UserId;
+        var lockResource = BuildLockResource(scope, clinicId, codeType, normalizedPrefix, year);
         var ownsTransaction = dbContext.Database.CurrentTransaction is null;
         IDbContextTransaction? transaction = null;
 
         try
         {
             if (ownsTransaction)
-                transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+                transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
             var currentTransaction = dbContext.Database.CurrentTransaction
                 ?? throw new InvalidOperationException("A database transaction is required to generate a business code.");
@@ -48,9 +49,20 @@ public sealed class CodeGeneratorService(
             command.Transaction = currentTransaction.GetDbTransaction();
             command.CommandText = """
                 SET NOCOUNT ON;
+
+                DECLARE @LockResult int;
+                EXEC @LockResult = sys.sp_getapplock
+                    @Resource = @LockResource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 15000;
+
+                IF @LockResult < 0
+                    THROW 51000, 'Could not acquire the business code counter lock.', 1;
+
                 DECLARE @NextNumber TABLE ([Value] int NOT NULL);
 
-                UPDATE [CodeCounters] WITH (UPDLOCK, HOLDLOCK)
+                UPDATE [CodeCounters] WITH (UPDLOCK)
                 SET [LastNumber] = [LastNumber] + 1,
                     [UpdatedDate] = @Now,
                     [UpdatedByUserId] = @ActorId
@@ -79,6 +91,7 @@ public sealed class CodeGeneratorService(
                 SELECT TOP (1) [Value] FROM @NextNumber;
                 """;
 
+            AddParameter(command, "@LockResource", lockResource);
             AddParameter(command, "@Id", Guid.NewGuid());
             AddParameter(command, "@Scope", scope.ToString());
             AddParameter(command, "@ClinicId", clinicId);
@@ -110,6 +123,14 @@ public sealed class CodeGeneratorService(
                 await transaction.DisposeAsync();
         }
     }
+
+    private static string BuildLockResource(
+        CodeScope scope,
+        Guid? clinicId,
+        CodeType codeType,
+        string prefix,
+        int year) =>
+        $"Auran.CodeCounter:{scope}:{clinicId?.ToString("N") ?? "Platform"}:{codeType}:{prefix}:{year}";
 
     private static void ValidateScope(CodeScope scope, Guid? clinicId)
     {
