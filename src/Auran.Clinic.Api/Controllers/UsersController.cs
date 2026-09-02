@@ -36,9 +36,10 @@ public sealed class UsersController(
 
     [HttpPost]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Users.Manage)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Roles.Manage)]
     [SwaggerOperation(
         Summary = "Create a clinic user",
-        Description = "Creates an ASP.NET Identity credential and matching clinic business user atomically. Normal users require at least one protected system role. Only a Clinic Super User can create another Super User.",
+        Description = "Creates an ASP.NET Identity credential and matching clinic business user atomically. Creating a user also assigns protected system roles, so both user-management and role-management permissions are required. Normal users require at least one protected system role. Only a Clinic Super User can create another Super User.",
         OperationId = "Users_Create",
         Tags = new[] { "Users" })]
     public async Task<ActionResult<BaseResponse<UserAccountResponse>>> Create(
