@@ -2,7 +2,7 @@ name: Backend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, foundation/code-counter-generated ]
   pull_request:
 
 permissions:
