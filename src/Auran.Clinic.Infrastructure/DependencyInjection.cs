@@ -1,8 +1,10 @@
 using System.Text;
 using Auran.Clinic.Application.Abstractions;
+using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Users;
+using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Caching;
@@ -108,6 +110,7 @@ public static class DependencyInjection
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddScoped<AccessTokenStateValidator>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
