@@ -116,6 +116,13 @@ public static class DependencyInjection
         services.AddAuthorization(options =>
         {
             options.AddPolicy(
+                ActorPolicies.Clinic,
+                policy => policy
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("actor_type", ActorType.Clinic.ToString())
+                    .RequireClaim("clinic_id"));
+
+            options.AddPolicy(
                 ActorPolicies.Platform,
                 policy => policy
                     .RequireAuthenticatedUser()
