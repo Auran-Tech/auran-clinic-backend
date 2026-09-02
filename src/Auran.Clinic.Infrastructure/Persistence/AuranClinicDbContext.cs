@@ -55,6 +55,7 @@ public class AuranClinicDbContext(
     public DbSet<FollowUp> FollowUps => Set<FollowUp>();
     public DbSet<ClinicSettings> ClinicSettings => Set<ClinicSettings>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<CodeCounter> CodeCounters => Set<CodeCounter>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
