@@ -11,15 +11,17 @@ namespace Auran.Clinic.Infrastructure.Persistence;
 
 public class AuranClinicDbContext(
     DbContextOptions<AuranClinicDbContext> options,
-    ICurrentUserContext currentUserContext)
+    ICurrentUserContext currentUserContext,
+    ClinicScopeOverride? clinicScopeOverride = null)
     : IdentityUserContext<ApplicationIdentityUser>(options)
 {
     private static readonly MethodInfo ApplyClinicQueryFilterMethod = typeof(AuranClinicDbContext)
         .GetMethod(nameof(ApplyClinicQueryFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     private bool IsAuthenticatedRequest => currentUserContext.IsAuthenticated;
-    private bool HasClinicScope => currentUserContext.ClinicId.HasValue;
-    private Guid CurrentClinicId => currentUserContext.ClinicId ?? Guid.Empty;
+    private Guid? EffectiveClinicId => currentUserContext.ClinicId ?? clinicScopeOverride?.ClinicId;
+    private bool HasClinicScope => EffectiveClinicId.HasValue;
+    private Guid CurrentClinicId => EffectiveClinicId ?? Guid.Empty;
 
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
     public new DbSet<User> Users => Set<User>();
@@ -103,9 +105,9 @@ public class AuranClinicDbContext(
     private void ApplyClinicQueryFilter<TEntity>(ModelBuilder modelBuilder)
         where TEntity : ClinicEntity
     {
-        // Unauthenticated/system scopes may explicitly operate across tenants for seeding,
-        // migrations and platform infrastructure. Authenticated requests are fail-closed:
-        // without a clinic claim they see no clinic-owned rows.
+        // Unauthenticated/system scopes may operate across tenants for startup and migration work.
+        // Authenticated actors are fail-closed. Platform services must explicitly enter a scoped
+        // ClinicScopeOverride before reading or writing clinic-owned data.
         modelBuilder.Entity<TEntity>()
             .HasQueryFilter(entity =>
                 !IsAuthenticatedRequest ||
@@ -124,7 +126,7 @@ public class AuranClinicDbContext(
         if (!HasClinicScope)
         {
             throw new InvalidOperationException(
-                "Authenticated actors without a clinic scope cannot write clinic-owned data.");
+                "Authenticated actors without an explicit clinic scope cannot write clinic-owned data.");
         }
 
         var currentClinicId = CurrentClinicId;
