@@ -70,8 +70,11 @@ jobs:
           --configuration Release
           --no-build
 
-      - name: Test
-        run: dotnet test Auran.Clinic.sln --configuration Release --no-build --verbosity normal
+      - name: Unit tests
+        run: dotnet test tests/Auran.Clinic.UnitTests/Auran.Clinic.UnitTests.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Integration tests
+        run: dotnet test tests/Auran.Clinic.IntegrationTests/Auran.Clinic.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
 
       - name: Publish API
         run: dotnet publish src/Auran.Clinic.Api/Auran.Clinic.Api.csproj --configuration Release --no-build --output ./artifacts/api
