@@ -2,6 +2,8 @@ using System.Net;
 using System.Threading.RateLimiting;
 using Auran.Clinic.Api.HealthChecks;
 using Auran.Clinic.Api.Infrastructure;
+using Auran.Clinic.Api.OpenApi;
+using Auran.Clinic.Api.Validation;
 using Auran.Clinic.Application;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Infrastructure;
@@ -17,6 +19,7 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
 builder.Services.AddControllers();
+builder.Services.AddApiValidation();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -28,6 +31,8 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.EnableAnnotations();
+    options.OperationFilter<AllowAnonymousOperationFilter>();
+    options.OperationFilter<AuthorizationResponsesOperationFilter>();
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
