@@ -9,7 +9,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = ActorPolicies.Clinic)]
 [Route("api/users")]
 [Produces("application/json")]
 public sealed class UsersController(
