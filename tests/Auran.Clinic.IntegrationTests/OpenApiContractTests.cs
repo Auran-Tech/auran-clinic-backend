@@ -23,7 +23,7 @@ public sealed class OpenApiContractTests(ApiFactory factory) : IClassFixture<Api
         var login = paths.GetProperty("/api/auth/login").GetProperty("post");
         var logout = paths.GetProperty("/api/auth/logout").GetProperty("post");
 
-        Assert.Equal(0, login.GetProperty("security")[0].EnumerateObject().Count());
+        Assert.Empty(login.GetProperty("security")[0].EnumerateObject());
         Assert.True(logout.GetProperty("responses").TryGetProperty("401", out _));
         Assert.True(logout.GetProperty("responses").TryGetProperty("403", out _));
     }
