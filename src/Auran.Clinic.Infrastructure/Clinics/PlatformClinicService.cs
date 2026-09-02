@@ -194,6 +194,7 @@ public sealed class PlatformClinicService(
         if (clinic is null)
             return null;
 
+        using var clinicScope = clinicScopeOverride.Enter(clinicId);
         var settings = await dbContext.ClinicSettings
             .SingleOrDefaultAsync(item => item.ClinicId == clinicId, cancellationToken);
         if (settings is null)
@@ -241,9 +242,31 @@ public sealed class PlatformClinicService(
         if (clinic is null)
             return false;
 
-        clinic.IsActive = isActive;
-        clinic.UpdatedDate = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            clinic.IsActive = isActive;
+            clinic.UpdatedDate = now;
+
+            if (!isActive)
+            {
+                using var clinicScope = clinicScopeOverride.Enter(clinicId);
+                await dbContext.RefreshTokens
+                    .Where(token => token.RevokedDate == null)
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(token => token.RevokedDate, now),
+                        cancellationToken);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
 
         logger.LogInformation(
             "Platform actor {PlatformUserId} set clinic {ClinicId} active state to {IsActive}.",
@@ -260,6 +283,7 @@ public sealed class PlatformClinicService(
         string? knownAdminEmail,
         CancellationToken cancellationToken)
     {
+        using var clinicScope = clinicScopeOverride.Enter(clinic.Id);
         var settings = await dbContext.ClinicSettings.AsNoTracking()
             .SingleOrDefaultAsync(item => item.ClinicId == clinic.Id, cancellationToken);
 
@@ -275,7 +299,6 @@ public sealed class PlatformClinicService(
 
             if (adminRoleId != Guid.Empty)
             {
-                using var clinicScope = clinicScopeOverride.Enter(clinic.Id);
                 var admin = await (
                         from userRole in dbContext.UserRoles.AsNoTracking()
                         join user in dbContext.Users.AsNoTracking()
