@@ -6,6 +6,7 @@ using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Domain.Entities;
+using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -28,7 +29,7 @@ public sealed class AuthService(
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var identityUser = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (identityUser is null)
+        if (identityUser is null || identityUser.AccountType != AccountType.Clinic)
             return null;
 
         var signInResult = await signInManager.CheckPasswordSignInAsync(
@@ -75,7 +76,7 @@ public sealed class AuthService(
             return null;
 
         var identityUser = await userManager.FindByIdAsync(user.IdentityUserId);
-        if (identityUser is null)
+        if (identityUser is null || identityUser.AccountType != AccountType.Clinic)
             return null;
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -218,6 +219,7 @@ public sealed class AuthService(
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, identityUser.Id),
+            new("actor_type", ActorType.Clinic.ToString()),
             new("user_id", user.Id.ToString()),
             new("clinic_id", user.ClinicId.ToString()),
             new("session_id", sessionId.ToString()),
