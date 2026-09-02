@@ -2,7 +2,7 @@ name: Backend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, foundation/code-counter-generated ]
   pull_request:
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.ref_name }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -46,9 +46,14 @@ jobs:
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
       - name: Generate pending EF migration
-        if: github.event_name == 'pull_request' && github.head_ref == 'foundation/code-counter-generated'
+        if: github.event_name == 'push' && github.ref_name == 'foundation/code-counter-generated'
         shell: bash
         run: |
+          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -name '*_CodeCounterFoundation.cs' | grep -q .; then
+            echo "CodeCounter migration already exists."
+            exit 0
+          fi
+
           dotnet ef migrations add CodeCounterFoundation \
             --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
             --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
@@ -58,13 +63,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-
-          if git diff --cached --quiet; then
-            echo "No migration files were generated."
-          else
-            git commit -m "schema: generate code counter migration"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
+          git commit -m "schema: generate code counter migration"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Apply migrations to SQL Server
         shell: bash
