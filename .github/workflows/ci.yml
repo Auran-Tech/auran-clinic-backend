@@ -2,11 +2,11 @@ name: Backend CI
 
 on:
   push:
-    branches: [ main, foundation/code-counter-generated ]
+    branches: [ main ]
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-test:
@@ -28,8 +28,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -45,27 +43,6 @@ jobs:
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
-      - name: Generate pending EF migration
-        if: github.event_name == 'push' && github.ref_name == 'foundation/code-counter-generated'
-        shell: bash
-        run: |
-          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -name '*_CodeCounterFoundation.cs' | grep -q .; then
-            echo "CodeCounter migration already exists."
-            exit 0
-          fi
-
-          dotnet ef migrations add CodeCounterFoundation \
-            --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
-            --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
-            --configuration Release \
-            --no-build
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
-          git commit -m "schema: generate code counter migration"
-          git push origin HEAD:${GITHUB_REF_NAME}
-
       - name: Apply migrations to SQL Server
         shell: bash
         run: |
@@ -77,9 +54,11 @@ jobs:
               --no-build; then
               exit 0
             fi
+
             echo "SQL Server not ready yet (attempt ${attempt}/30)."
             sleep 2
           done
+
           echo "Database migration failed after all retries."
           exit 1
 
