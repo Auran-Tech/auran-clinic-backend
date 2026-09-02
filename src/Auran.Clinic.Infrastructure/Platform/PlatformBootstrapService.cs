@@ -23,65 +23,75 @@ public sealed class PlatformBootstrapService(
         if (!_options.Enabled)
             return;
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-        try
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            await AcquireBootstrapLockAsync(cancellationToken);
+            // A retry can reuse this scoped DbContext after a transaction was rolled back.
+            // Clear tracked state so the database remains the source of truth for the
+            // first-admin decision on every execution-strategy attempt.
+            dbContext.ChangeTracker.Clear();
 
-            if (await dbContext.PlatformUsers.AnyAsync(cancellationToken))
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+            try
             {
+                await AcquireBootstrapLockAsync(cancellationToken);
+
+                if (await dbContext.PlatformUsers.AnyAsync(cancellationToken))
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    return;
+                }
+
+                ValidateInitialAdminConfiguration();
+                var email = _options.Email.Trim().ToLowerInvariant();
+                var existingIdentity = await userManager.FindByEmailAsync(email);
+                if (existingIdentity is not null)
+                {
+                    throw new InvalidOperationException(
+                        "Platform bootstrap email is already used by another Identity account.");
+                }
+
+                var identityUser = new ApplicationIdentityUser
+                {
+                    UserName = email,
+                    Email = email,
+                    PhoneNumber = Clean(_options.Phone),
+                    EmailConfirmed = true,
+                    LockoutEnabled = true,
+                    AccountType = AccountType.Platform
+                };
+
+                var identityResult = await userManager.CreateAsync(identityUser, _options.Password);
+                if (!identityResult.Succeeded)
+                {
+                    throw new InvalidOperationException(
+                        "Platform Admin bootstrap failed: " +
+                        string.Join("; ", identityResult.Errors.Select(error => error.Description)));
+                }
+
+                dbContext.PlatformUsers.Add(new PlatformUser
+                {
+                    Id = Guid.NewGuid(),
+                    IdentityUserId = identityUser.Id,
+                    FullName = _options.FullName.Trim(),
+                    Email = email,
+                    Phone = Clean(_options.Phone),
+                    IsActive = true,
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return;
             }
-
-            ValidateInitialAdminConfiguration();
-            var email = _options.Email.Trim().ToLowerInvariant();
-            var existingIdentity = await userManager.FindByEmailAsync(email);
-            if (existingIdentity is not null)
+            catch
             {
-                throw new InvalidOperationException(
-                    "Platform bootstrap email is already used by another Identity account.");
+                await transaction.RollbackAsync(cancellationToken);
+                dbContext.ChangeTracker.Clear();
+                throw;
             }
-
-            var identityUser = new ApplicationIdentityUser
-            {
-                UserName = email,
-                Email = email,
-                PhoneNumber = Clean(_options.Phone),
-                EmailConfirmed = true,
-                LockoutEnabled = true,
-                AccountType = AccountType.Platform
-            };
-
-            var identityResult = await userManager.CreateAsync(identityUser, _options.Password);
-            if (!identityResult.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    "Platform Admin bootstrap failed: " +
-                    string.Join("; ", identityResult.Errors.Select(error => error.Description)));
-            }
-
-            dbContext.PlatformUsers.Add(new PlatformUser
-            {
-                Id = Guid.NewGuid(),
-                IdentityUserId = identityUser.Id,
-                FullName = _options.FullName.Trim(),
-                Email = email,
-                Phone = Clean(_options.Phone),
-                IsActive = true,
-                CreatedDate = DateTime.UtcNow
-            });
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+        });
     }
 
     private async Task AcquireBootstrapLockAsync(CancellationToken cancellationToken)
