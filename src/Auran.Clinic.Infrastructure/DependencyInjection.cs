@@ -5,6 +5,7 @@ using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Users;
+using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
@@ -100,15 +101,23 @@ public static class DependencyInjection
                                 context.Principal,
                                 context.HttpContext.RequestAborted))
                         {
-                            context.Fail("The user or clinic is inactive.");
+                            context.Fail("The authentication session is inactive.");
                         }
                     }
                 };
             });
 
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(
+                ActorPolicies.Platform,
+                policy => policy
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("actor_type", ActorType.Platform.ToString()));
+        });
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPlatformAuthService, PlatformAuthService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();
