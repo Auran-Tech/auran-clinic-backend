@@ -1,6 +1,6 @@
 namespace Auran.Clinic.Infrastructure.Auditing;
 
-internal static class AuditRedactor
+public static class AuditRedactor
 {
     private static readonly string[] SensitiveFragments =
     [
