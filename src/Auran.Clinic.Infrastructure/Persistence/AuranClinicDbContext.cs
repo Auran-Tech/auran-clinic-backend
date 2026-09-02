@@ -17,7 +17,8 @@ public class AuranClinicDbContext(
     private static readonly MethodInfo ApplyClinicQueryFilterMethod = typeof(AuranClinicDbContext)
         .GetMethod(nameof(ApplyClinicQueryFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-    private bool EnforceClinicScope => currentUserContext.IsAuthenticated && currentUserContext.ClinicId.HasValue;
+    private bool IsAuthenticatedRequest => currentUserContext.IsAuthenticated;
+    private bool HasClinicScope => currentUserContext.ClinicId.HasValue;
     private Guid CurrentClinicId => currentUserContext.ClinicId ?? Guid.Empty;
 
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
@@ -102,19 +103,33 @@ public class AuranClinicDbContext(
     private void ApplyClinicQueryFilter<TEntity>(ModelBuilder modelBuilder)
         where TEntity : ClinicEntity
     {
+        // Unauthenticated/system scopes may explicitly operate across tenants for seeding,
+        // migrations and platform infrastructure. Authenticated requests are fail-closed:
+        // without a clinic claim they see no clinic-owned rows.
         modelBuilder.Entity<TEntity>()
-            .HasQueryFilter(entity => !EnforceClinicScope || entity.ClinicId == CurrentClinicId);
+            .HasQueryFilter(entity =>
+                !IsAuthenticatedRequest ||
+                (HasClinicScope && entity.ClinicId == CurrentClinicId));
     }
 
     private void EnforceClinicWriteBoundary()
     {
-        if (!EnforceClinicScope)
+        var changedClinicEntries = ChangeTracker.Entries<ClinicEntity>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
+
+        if (changedClinicEntries.Count == 0 || !IsAuthenticatedRequest)
             return;
+
+        if (!HasClinicScope)
+        {
+            throw new InvalidOperationException(
+                "Authenticated actors without a clinic scope cannot write clinic-owned data.");
+        }
 
         var currentClinicId = CurrentClinicId;
 
-        foreach (var entry in ChangeTracker.Entries<ClinicEntity>()
-                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        foreach (var entry in changedClinicEntries)
         {
             if (entry.State == EntityState.Added)
             {
