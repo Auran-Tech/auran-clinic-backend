@@ -86,9 +86,7 @@ public sealed class PlatformBootstrapTests(ApiFactory factory) : IClassFixture<A
         });
     }
 
-    private sealed class BootstrapTestDatabase(
-        ServiceProvider serviceProvider,
-        string connectionString) : IAsyncDisposable
+    private sealed class BootstrapTestDatabase(ServiceProvider serviceProvider) : IAsyncDisposable
     {
         public static async Task<BootstrapTestDatabase> CreateAsync(ApiFactory factory)
         {
@@ -118,7 +116,7 @@ public sealed class PlatformBootstrapTests(ApiFactory factory) : IClassFixture<A
                 .AddEntityFrameworkStores<AuranClinicDbContext>();
 
             var provider = services.BuildServiceProvider();
-            var database = new BootstrapTestDatabase(provider, connectionBuilder.ConnectionString);
+            var database = new BootstrapTestDatabase(provider);
 
             await using var scope = provider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AuranClinicDbContext>();
