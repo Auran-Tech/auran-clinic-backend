@@ -1,3 +1,4 @@
+using System.Net;
 using System.Threading.RateLimiting;
 using Auran.Clinic.Api.HealthChecks;
 using Auran.Clinic.Api.Infrastructure;
@@ -5,6 +6,7 @@ using Auran.Clinic.Application;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -65,6 +67,26 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+
+    var configuredProxies = builder.Configuration
+        .GetSection("ForwardedHeaders:KnownProxies")
+        .Get<string[]>() ?? [];
+
+    foreach (var configuredProxy in configuredProxies)
+    {
+        if (IPAddress.TryParse(configuredProxy, out var proxyAddress))
+        {
+            options.KnownProxies.Add(proxyAddress);
+        }
+    }
+});
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -103,6 +125,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 // Keep the machine-readable OpenAPI document available in every environment so
