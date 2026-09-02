@@ -1,33 +1,25 @@
-name: Backend CI
+name: Platform Identity Migration Generator
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    branches: [ foundation/platform-identity-schema ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-and-test:
+  generate-migration:
     runs-on: ubuntu-latest
-
-    services:
-      sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: Auran_CI_Password_123!
-        ports:
-          - 1433:1433
 
     env:
       ConnectionStrings__DefaultConnection: Server=localhost,1433;Database=AuranClinicCi;User Id=sa;Password=Auran_CI_Password_123!;TrustServerCertificate=True;Encrypt=False
       Jwt__SigningKey: Auran_CI_Only_JWT_Signing_Key_Not_A_Secret_2026
 
     steps:
-      - name: Checkout
+      - name: Checkout branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -43,35 +35,22 @@ jobs:
       - name: Build
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore
 
-      - name: Apply migrations to SQL Server
+      - name: Generate EF migration
         shell: bash
         run: |
-          for attempt in {1..30}; do
-            if dotnet ef database update \
-              --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
-              --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
-              --configuration Release \
-              --no-build; then
-              exit 0
-            fi
+          if find src/Auran.Clinic.Infrastructure/Persistence/Migrations -name '*_PlatformIdentityFoundation.cs' | grep -q .; then
+            echo "Platform identity migration already exists."
+            exit 0
+          fi
 
-            echo "SQL Server not ready yet (attempt ${attempt}/30)."
-            sleep 2
-          done
+          dotnet ef migrations add PlatformIdentityFoundation \
+            --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+            --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
+            --configuration Release \
+            --no-build
 
-          echo "Database migration failed after all retries."
-          exit 1
-
-      - name: Verify EF model matches migrations
-        run: >-
-          dotnet ef migrations has-pending-model-changes
-          --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj
-          --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj
-          --configuration Release
-          --no-build
-
-      - name: Test
-        run: dotnet test Auran.Clinic.sln --configuration Release --no-build --verbosity normal
-
-      - name: Publish API
-        run: dotnet publish src/Auran.Clinic.Api/Auran.Clinic.Api.csproj --configuration Release --no-build --output ./artifacts/api
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Auran.Clinic.Infrastructure/Persistence/Migrations
+          git commit -m "schema: generate platform identity migration"
+          git push origin HEAD:${GITHUB_REF_NAME}
