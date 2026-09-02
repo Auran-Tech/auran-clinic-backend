@@ -1,3 +1,4 @@
+using System.Data;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Users;
 using Auran.Clinic.Domain.Entities;
@@ -49,7 +50,20 @@ public sealed class UserAccountService(
         CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        if (!isActive && user.IsSuperUser)
+        {
+            var activeSuperUserCount = await dbContext.Users
+                .CountAsync(candidate => candidate.IsSuperUser && candidate.IsActive, cancellationToken);
+
+            if (activeSuperUserCount <= 1)
+            {
+                return new UserAccountStatusResult(UserAccountStatusOutcome.Conflict);
+            }
+        }
 
         user.IsActive = isActive;
         user.UpdatedDate = now;
