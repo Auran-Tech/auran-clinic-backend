@@ -3,6 +3,7 @@ using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
+using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Users;
 using Auran.Clinic.Domain.Enums;
@@ -10,6 +11,7 @@ using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
 using Auran.Clinic.Infrastructure.Caching;
+using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Codes;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -30,15 +32,17 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddScoped<ClinicScopeOverride>();
+
         var connectionString = configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(connectionString))
-        {
-            services.AddDbContext<AuranClinicDbContext>(options => options.UseSqlServer(connectionString));
-            services.AddScoped<PermissionCatalogInitializer>();
-            services.AddHostedService<PermissionCatalogHostedService>();
-            services.AddScoped<PlatformBootstrapService>();
-            services.AddHostedService<PlatformBootstrapHostedService>();
-        }
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
+
+        services.AddDbContext<AuranClinicDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddScoped<PermissionCatalogInitializer>();
+        services.AddHostedService<PermissionCatalogHostedService>();
+        services.AddScoped<PlatformBootstrapService>();
+        services.AddHostedService<PlatformBootstrapHostedService>();
 
         services.Configure<PlatformBootstrapOptions>(
             configuration.GetSection(PlatformBootstrapOptions.SectionName));
@@ -116,6 +120,13 @@ public static class DependencyInjection
         services.AddAuthorization(options =>
         {
             options.AddPolicy(
+                ActorPolicies.Clinic,
+                policy => policy
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("actor_type", ActorType.Clinic.ToString())
+                    .RequireClaim("clinic_id"));
+
+            options.AddPolicy(
                 ActorPolicies.Platform,
                 policy => policy
                     .RequireAuthenticatedUser()
@@ -124,6 +135,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPlatformAuthService, PlatformAuthService>();
+        services.AddScoped<IPlatformClinicService, PlatformClinicService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();

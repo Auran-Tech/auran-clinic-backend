@@ -4,8 +4,10 @@ using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Auran.Clinic.UnitTests;
@@ -63,6 +65,7 @@ public sealed class AuthLockoutTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=AuranClinicUnitTests;User Id=sa;Password=Unit_Test_Only_123!;TrustServerCertificate=True;Encrypt=False",
                 ["Jwt:Issuer"] = "Auran.Clinic.Tests",
                 ["Jwt:Audience"] = "Auran.Clinic.Tests.Client",
                 ["Jwt:SigningKey"] = "Auran_Unit_Test_Signing_Key_At_Least_32_Bytes_Long",
@@ -73,9 +76,12 @@ public sealed class AuthLockoutTests
 
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddInfrastructure(configuration);
+
+        services.RemoveAll<DbContextOptions<AuranClinicDbContext>>();
+        services.RemoveAll<IDbContextOptionsConfiguration<AuranClinicDbContext>>();
         services.AddDbContext<AuranClinicDbContext>(options =>
             options.UseInMemoryDatabase(Guid.NewGuid().ToString()));
-        services.AddInfrastructure(configuration);
 
         return services.BuildServiceProvider();
     }

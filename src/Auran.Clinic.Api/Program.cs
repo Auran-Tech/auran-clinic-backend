@@ -86,9 +86,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     foreach (var configuredProxy in configuredProxies)
     {
         if (IPAddress.TryParse(configuredProxy, out var proxyAddress))
-        {
             options.KnownProxies.Add(proxyAddress);
-        }
     }
 });
 
@@ -132,15 +130,23 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
+    await next();
+});
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        diagnosticContext.Set("TraceIdentifier", httpContext.TraceIdentifier);
+});
 
 // Keep the machine-readable OpenAPI document available in every environment so
 // automated clients can discover the API contract. The interactive UI remains development-only.
 app.UseSwagger();
 
 if (app.Environment.IsDevelopment())
-{
     app.UseSwaggerUI();
-}
 
 app.UseHttpsRedirection();
 app.UseRouting();

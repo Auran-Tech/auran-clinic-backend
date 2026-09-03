@@ -11,14 +11,17 @@ namespace Auran.Clinic.Infrastructure.Persistence;
 
 public class AuranClinicDbContext(
     DbContextOptions<AuranClinicDbContext> options,
-    ICurrentUserContext currentUserContext)
+    ICurrentUserContext currentUserContext,
+    ClinicScopeOverride? clinicScopeOverride = null)
     : IdentityUserContext<ApplicationIdentityUser>(options)
 {
     private static readonly MethodInfo ApplyClinicQueryFilterMethod = typeof(AuranClinicDbContext)
         .GetMethod(nameof(ApplyClinicQueryFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-    private bool EnforceClinicScope => currentUserContext.IsAuthenticated && currentUserContext.ClinicId.HasValue;
-    private Guid CurrentClinicId => currentUserContext.ClinicId ?? Guid.Empty;
+    private bool IsAuthenticatedRequest => currentUserContext.IsAuthenticated;
+    private Guid? EffectiveClinicId => currentUserContext.ClinicId ?? clinicScopeOverride?.ClinicId;
+    private bool HasClinicScope => EffectiveClinicId.HasValue;
+    private Guid CurrentClinicId => EffectiveClinicId ?? Guid.Empty;
 
     public DbSet<ClinicEntityType> Clinics => Set<ClinicEntityType>();
     public new DbSet<User> Users => Set<User>();
@@ -102,19 +105,33 @@ public class AuranClinicDbContext(
     private void ApplyClinicQueryFilter<TEntity>(ModelBuilder modelBuilder)
         where TEntity : ClinicEntity
     {
+        // Unauthenticated/system scopes may operate across tenants for startup and migration work.
+        // Authenticated actors are fail-closed. Platform services must explicitly enter a scoped
+        // ClinicScopeOverride before reading or writing clinic-owned data.
         modelBuilder.Entity<TEntity>()
-            .HasQueryFilter(entity => !EnforceClinicScope || entity.ClinicId == CurrentClinicId);
+            .HasQueryFilter(entity =>
+                !IsAuthenticatedRequest ||
+                (HasClinicScope && entity.ClinicId == CurrentClinicId));
     }
 
     private void EnforceClinicWriteBoundary()
     {
-        if (!EnforceClinicScope)
+        var changedClinicEntries = ChangeTracker.Entries<ClinicEntity>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
+
+        if (changedClinicEntries.Count == 0 || !IsAuthenticatedRequest)
             return;
+
+        if (!HasClinicScope)
+        {
+            throw new InvalidOperationException(
+                "Authenticated actors without an explicit clinic scope cannot write clinic-owned data.");
+        }
 
         var currentClinicId = CurrentClinicId;
 
-        foreach (var entry in ChangeTracker.Entries<ClinicEntity>()
-                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        foreach (var entry in changedClinicEntries)
         {
             if (entry.State == EntityState.Added)
             {

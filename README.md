@@ -6,18 +6,22 @@ The product is designed as one backend codebase serving multiple clinics. Clinic
 
 ## Current Phase
 
-**V1 backend foundation and implementation.**
+**V1 backend foundation complete and ready for review/testing.**
 
-The immediate implementation order is:
+The foundation now includes:
 
-1. Authentication and current user context.
-2. Clinic context and multi-clinic data isolation.
-3. System roles, permissions, and protected Super User behavior.
-4. Patients and duplicate detection.
-5. Workflow configuration and live queue.
-6. Visits and multi-session visits.
-7. Dynamic patient profile and clinical fields.
-8. Prescriptions / clinical orders, follow-ups, files, reports, settings, and audit.
+1. Clinic and Platform authentication with separate actor boundaries.
+2. Current-user and clinic context.
+3. Fail-closed multi-clinic query/write isolation for authenticated actors.
+4. Protected system roles, permission catalog, and Clinic Super User behavior.
+5. Clinic user lifecycle and role assignment.
+6. Platform Admin bootstrap and authentication.
+7. Platform clinic provisioning, metadata management, activation, and suspension.
+8. Refresh-token rotation, session revocation, account/clinic state validation, and login rate limiting.
+9. Audit logging for sensitive clinic-user management actions.
+10. Health checks, structured request logging, correlation IDs, Docker development setup, migrations, and CI quality gates.
+
+After foundation review and testing, the next business implementation stage starts with **Patients and duplicate detection**.
 
 ## Solution Structure
 
@@ -79,10 +83,12 @@ Technical implementations:
 - Entity Framework Core
 - SQL Server
 - Identity persistence
-- Repositories
-- File storage
-- Seed data
-- External implementations
+- Authentication/session persistence
+- Authorization and permission catalog initialization
+- Clinic provisioning
+- Audit persistence
+- Caching and code generation
+- Seed/bootstrap services
 
 ## Technology
 
@@ -97,19 +103,44 @@ Technical implementations:
 - Swagger / OpenAPI
 - xUnit
 
-## Multi-Clinic Foundation
+## Actor and Tenant Boundaries
 
-V1 contains only the foundation required to serve multiple clinics. Future SaaS concerns such as subscription billing, plan management, owner billing portal, and platform administration are intentionally not implemented now.
+The runtime has two authenticated actor types:
 
-Current rules:
+- **Clinic** — must carry a valid `clinic_id` and can access only that clinic's protected APIs/data.
+- **Platform** — can access only Platform APIs by default. Clinic-owned EF entities remain hidden unless a Platform infrastructure operation explicitly enters a clinic scope.
 
-- One frontend codebase.
-- One backend codebase.
-- Multiple clinics.
-- No clinic-specific branches in code.
-- Business data must always belong to a clinic.
-- Branding and configuration belong to the clinic.
-- Future SaaS features must be additive, not require rewriting clinic business modules.
+Authenticated clinic-owned data access is **fail closed**. A valid authenticated token without an effective clinic scope does not see clinic-owned rows and cannot write them.
+
+Unauthenticated/system scopes remain available for narrowly defined startup, authentication, migration, and bootstrap operations.
+
+## Protected System Roles
+
+V1 uses four backend-owned system roles:
+
+- `ADMIN`
+- `RECEPTIONIST`
+- `DOCTOR`
+- `NURSE`
+
+The catalog and its default permission mappings are initialized by the backend. These roles are protected definitions; clinic administrators assign them to users rather than renaming or deleting them.
+
+A Clinic **Super User** remains a protected business flag and receives all known permissions independent of normal role assignments. The final active Super User in a clinic cannot be deactivated.
+
+## Platform Clinic Provisioning
+
+A Platform actor can provision and manage clinics through `/api/platform/clinics`.
+
+Provisioning is atomic and creates:
+
+- The clinic.
+- A server-generated clinic code.
+- Default clinic settings.
+- The first Clinic Identity account.
+- The first active Clinic Super User.
+- The initial `ADMIN` role assignment.
+
+Suspending a clinic immediately invalidates its active clinic sessions because access-token validation checks the persisted clinic state on authenticated requests.
 
 ## Standard Service Responses
 
@@ -156,13 +187,17 @@ dotnet build
 dotnet test
 ```
 
+A database connection string and JWT signing key are required at runtime. Production values must come from the deployment environment or secret store.
+
 Run the API:
 
 ```bash
+ConnectionStrings__DefaultConnection="<connection-string>" \
+Jwt__SigningKey="<at-least-32-random-characters>" \
 dotnet run --project src/Auran.Clinic.Api
 ```
 
-Swagger is available in Development mode after the API starts.
+Swagger UI is available in Development mode after the API starts. The machine-readable OpenAPI document remains available in all environments by design.
 
 ## Docker Development Stack
 
@@ -173,11 +208,29 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Set a strong local SQL Server password in `.env` before starting the stack. Production secrets must be provided by the deployment environment and must not be committed.
+Set strong local SQL Server and JWT values in `.env` before starting the stack.
+
+To create the first Platform Admin, temporarily set the `PLATFORM_BOOTSTRAP_*` values in `.env` and set `PLATFORM_BOOTSTRAP_ENABLED=true`. After the first Platform account is successfully created, disable the bootstrap and remove the one-time password from the local environment.
+
+Production secrets must be supplied by the deployment environment and must not be committed.
+
+## Observability and Health
+
+- `GET /health/live` — process liveness.
+- `GET /health/ready` — readiness including database connectivity.
+- Every HTTP response receives `X-Correlation-ID` using the ASP.NET Core trace identifier.
+- Serilog request logging includes the same trace identifier for correlation.
 
 ## CI
 
-GitHub Actions restores, builds, tests, and publishes the API for pushes and pull requests to `main`.
+GitHub Actions runs for pull requests and `main` and performs:
+
+1. Restore.
+2. Release build with warnings treated as errors.
+3. Apply EF migrations to a real SQL Server container.
+4. Verify the EF model has no pending migration changes.
+5. Run unit and integration tests.
+6. Publish the API.
 
 ## Repository Rules
 
@@ -185,6 +238,8 @@ GitHub Actions restores, builds, tests, and publishes the API for pushes and pul
 - Do not expose EF entities directly from API endpoints.
 - Keep controllers thin.
 - Business rules belong outside controllers.
+- Clinic-owned data must stay tenant scoped.
+- Platform code must explicitly enter a clinic scope before accessing clinic-owned entities.
 - Do not add a `Shared` project.
 - Do not add API versioning in V1.
 - Do not commit secrets or production connection strings.

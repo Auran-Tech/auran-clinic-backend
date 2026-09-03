@@ -7,8 +7,13 @@ services:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set};TrustServerCertificate=True;
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY must be set}
+      PlatformBootstrap__Enabled: ${PLATFORM_BOOTSTRAP_ENABLED:-false}
+      PlatformBootstrap__FullName: ${PLATFORM_BOOTSTRAP_FULL_NAME:-}
+      PlatformBootstrap__Email: ${PLATFORM_BOOTSTRAP_EMAIL:-}
+      PlatformBootstrap__Password: ${PLATFORM_BOOTSTRAP_PASSWORD:-}
+      PlatformBootstrap__Phone: ${PLATFORM_BOOTSTRAP_PHONE:-}
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -17,7 +22,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set}
     ports:
       - "1433:1433"
     volumes:

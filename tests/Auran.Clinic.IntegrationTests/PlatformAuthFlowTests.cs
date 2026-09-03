@@ -83,6 +83,22 @@ public sealed class PlatformAuthFlowTests
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task ClinicOnlyEndpoint_RejectsPlatformAccessToken()
+    {
+        using var factory = new ApiFactory();
+        var credentials = await CreatePlatformAccountAsync(factory);
+        using var client = factory.CreateClient();
+        var platformSession = await PlatformLoginAsync(client, credentials);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/permissions/list");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", platformSession.AccessToken);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     private static async Task<TestCredentials> CreatePlatformAccountAsync(ApiFactory factory)
     {
         using var scope = factory.Services.CreateScope();

@@ -48,6 +48,7 @@ public class JwtOptionsValidatorTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=AuranClinicUnitTests;User Id=sa;Password=Unit_Test_Only_123!;TrustServerCertificate=True;Encrypt=False",
                 ["Jwt:Issuer"] = "Auran.Clinic",
                 ["Jwt:Audience"] = "Auran.Clinic.Client",
                 ["Jwt:AccessTokenMinutes"] = "60",

@@ -30,6 +30,72 @@ public sealed class TenantPersistenceBoundaryTests
     }
 
     [Fact]
+    public async Task AuthenticatedActorWithoutClinicScope_QueryFailsClosed()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var clinicA = Guid.NewGuid();
+        var clinicB = Guid.NewGuid();
+
+        await using (var seedContext = CreateContext(databaseName, TestCurrentUserContext.Unauthenticated()))
+        {
+            seedContext.Patients.AddRange(
+                CreatePatient(clinicA, "A"),
+                CreatePatient(clinicB, "B"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(databaseName, TestCurrentUserContext.AuthenticatedWithoutClinic());
+        var patients = await context.Patients.AsNoTracking().ToListAsync();
+
+        Assert.Empty(patients);
+    }
+
+    [Fact]
+    public async Task AuthenticatedActorWithoutClinicScope_WriteIsRejected()
+    {
+        await using var context = CreateContext(
+            Guid.NewGuid().ToString(),
+            TestCurrentUserContext.AuthenticatedWithoutClinic());
+
+        context.Patients.Add(CreatePatient(Guid.NewGuid(), "A"));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SaveChangesAsync());
+
+        Assert.Equal(
+            "Authenticated actors without an explicit clinic scope cannot write clinic-owned data.",
+            exception.Message);
+    }
+
+    [Fact]
+    public async Task ExplicitPlatformClinicScope_AllowsOnlySelectedClinic()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var clinicA = Guid.NewGuid();
+        var clinicB = Guid.NewGuid();
+
+        await using (var seedContext = CreateContext(databaseName, TestCurrentUserContext.Unauthenticated()))
+        {
+            seedContext.Patients.AddRange(
+                CreatePatient(clinicA, "A"),
+                CreatePatient(clinicB, "B"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var scopeOverride = new ClinicScopeOverride();
+        using var scope = scopeOverride.Enter(clinicB);
+        await using var context = CreateContext(
+            databaseName,
+            TestCurrentUserContext.AuthenticatedWithoutClinic(),
+            scopeOverride);
+
+        var patients = await context.Patients.AsNoTracking().ToListAsync();
+
+        var patient = Assert.Single(patients);
+        Assert.Equal(clinicB, patient.ClinicId);
+    }
+
+    [Fact]
     public async Task UnauthenticatedQuery_RemainsUnfilteredForAuthenticationAndBootstrapFlows()
     {
         var databaseName = Guid.NewGuid().ToString();
@@ -103,13 +169,14 @@ public sealed class TenantPersistenceBoundaryTests
 
     private static AuranClinicDbContext CreateContext(
         string databaseName,
-        ICurrentUserContext currentUserContext)
+        ICurrentUserContext currentUserContext,
+        ClinicScopeOverride? clinicScopeOverride = null)
     {
         var options = new DbContextOptionsBuilder<AuranClinicDbContext>()
             .UseInMemoryDatabase(databaseName)
             .Options;
 
-        return new AuranClinicDbContext(options, currentUserContext);
+        return new AuranClinicDbContext(options, currentUserContext, clinicScopeOverride);
     }
 
     private static Patient CreatePatient(Guid clinicId, string suffix) => new()
@@ -128,6 +195,11 @@ public sealed class TenantPersistenceBoundaryTests
         public bool IsSuperUser { get; init; }
 
         public static TestCurrentUserContext Unauthenticated() => new();
+
+        public static TestCurrentUserContext AuthenticatedWithoutClinic() => new()
+        {
+            IsAuthenticated = true
+        };
 
         public static TestCurrentUserContext ForClinic(Guid clinicId) => new()
         {

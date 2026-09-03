@@ -7,7 +7,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Auran.Clinic.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = ActorPolicies.Clinic)]
 [Route("api/permissions")]
 [Produces("application/json")]
 public sealed class PermissionsController(IPermissionCatalogService permissionCatalogService) : ControllerBase
@@ -20,6 +20,7 @@ public sealed class PermissionsController(IPermissionCatalogService permissionCa
         Tags = new[] { "Permissions" })]
     [ProducesResponseType(typeof(BaseResponse<List<PermissionCatalogResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<BaseResponse<List<PermissionCatalogResponse>>>> List(
         CancellationToken cancellationToken)
     {

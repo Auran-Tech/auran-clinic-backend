@@ -1,5 +1,6 @@
 using Auran.Clinic.Api.Infrastructure;
 using Auran.Clinic.Application.Authentication;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,16 +58,17 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(new BaseResponse<AuthResponse> { Status = true, Data = result });
     }
 
-    [Authorize]
+    [Authorize(Policy = ActorPolicies.Clinic)]
     [HttpPost("logout")]
     [SwaggerOperation(
         Summary = "Log out and revoke a refresh token",
-        Description = "Revokes the supplied refresh token for the authenticated user. This endpoint requires a valid JWT Bearer access token. After a successful response, the revoked refresh token cannot be used to obtain another access token.",
+        Description = "Revokes the supplied refresh token for the authenticated clinic user. This endpoint requires a valid clinic JWT Bearer access token. After a successful response, the revoked refresh token cannot be used to obtain another access token.",
         OperationId = "Auth_Logout",
         Tags = new[] { "Authentication" })]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<BaseResponse>> Logout(
         [FromBody] RefreshTokenRequest request,
         CancellationToken cancellationToken)
