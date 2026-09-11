@@ -1,6 +1,8 @@
 namespace Auran.Clinic.Application.Localization;
 
-public sealed class ApiMessages;
+public sealed class ApiMessages
+{
+}
 
 public static class ApiMessageKeys
 {
