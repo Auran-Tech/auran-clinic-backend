@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace Auran.Clinic.Application.Models;
 
 public class BaseResponse
 {
-    public string? Message { get; set; }
+    public string Message { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public string? MessageKey { get; set; }
 
     public bool Status { get; set; }
 

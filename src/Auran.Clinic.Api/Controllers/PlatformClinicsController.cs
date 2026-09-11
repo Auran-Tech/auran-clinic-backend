@@ -34,7 +34,7 @@ public sealed class PlatformClinicsController(IPlatformClinicService clinicServi
             var response = new BaseResponse
             {
                 Status = false,
-                Message = result.Error,
+                Message = result.Error ?? string.Empty,
                 Error = result.IsConflict ? "clinic_provisioning_conflict" : "clinic_provisioning_failed"
             };
 
