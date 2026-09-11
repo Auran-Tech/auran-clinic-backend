@@ -58,6 +58,22 @@ public sealed class LocalizedApiMessageTests(ApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task WarningResponse_ReturnsPreferredLanguageMessage()
+    {
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/_test/message-probe/warning");
+        request.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue("ar"));
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var envelope = await response.Content.ReadFromJsonAsync<BaseResponse>();
+
+        Assert.NotNull(envelope);
+        Assert.True(envelope.Status);
+        Assert.Equal("تم تنفيذ الطلب مع وجود تنبيه.", envelope.Message);
+    }
+
+    [Fact]
     public async Task ValidationFailure_ReturnsLocalizedArabicMessage()
     {
         using var client = factory.CreateClient();
