@@ -2,6 +2,7 @@ namespace Auran.Clinic.Application.Clinics;
 
 public sealed class UpdateClinicRequest
 {
+    public Guid ClinicId { get; init; }
     public required string Name { get; init; }
     public string? TimeZoneId { get; init; }
     public string? PatientNumberPrefix { get; init; }
