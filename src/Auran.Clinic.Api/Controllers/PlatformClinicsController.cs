@@ -1,6 +1,7 @@
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Models;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -11,7 +12,10 @@ namespace Auran.Clinic.Api.Controllers;
 [Authorize(Policy = ActorPolicies.Platform)]
 [Route("api/platform/clinics")]
 [Produces("application/json")]
-public sealed class PlatformClinicsController(IPlatformClinicService clinicService) : ControllerBase
+public sealed class PlatformClinicsController(
+    IPlatformClinicService clinicService,
+    IValidator<UpdateClinicRequest> updateClinicValidator,
+    IValidator<SetClinicStatusRequest> setClinicStatusValidator) : ControllerBase
 {
     [HttpPost]
     [SwaggerOperation(
@@ -78,6 +82,9 @@ public sealed class PlatformClinicsController(IPlatformClinicService clinicServi
         [FromQuery] Guid clinicId,
         CancellationToken cancellationToken)
     {
+        if (clinicId == Guid.Empty)
+            return ValidationFailure();
+
         var clinic = await clinicService.GetAsync(clinicId, cancellationToken);
         if (clinic is null)
             return NotFound(new BaseResponse { Status = false, Message = "Clinic not found." });
@@ -95,6 +102,10 @@ public sealed class PlatformClinicsController(IPlatformClinicService clinicServi
         [FromBody] UpdateClinicRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = await updateClinicValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure();
+
         var clinic = await clinicService.UpdateAsync(request.ClinicId, request, cancellationToken);
         if (clinic is null)
             return NotFound(new BaseResponse { Status = false, Message = "Clinic not found." });
@@ -112,6 +123,10 @@ public sealed class PlatformClinicsController(IPlatformClinicService clinicServi
         [FromBody] SetClinicStatusRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = await setClinicStatusValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure();
+
         var updated = await clinicService.SetActiveAsync(request.ClinicId, request.IsActive, cancellationToken);
         if (!updated)
             return NotFound(new BaseResponse { Status = false, Message = "Clinic not found." });
@@ -122,4 +137,10 @@ public sealed class PlatformClinicsController(IPlatformClinicService clinicServi
             Message = request.IsActive ? "Clinic activated." : "Clinic suspended."
         });
     }
+
+    private BadRequestObjectResult ValidationFailure() => BadRequest(new BaseResponse
+    {
+        Status = false,
+        Error = "validation_error"
+    });
 }
