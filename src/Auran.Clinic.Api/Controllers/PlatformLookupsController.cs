@@ -34,7 +34,7 @@ public sealed class PlatformLookupsController(ISystemLookupService lookupService
     [HttpGet("locales")]
     [SwaggerOperation(
         Summary = "List supported locales",
-        Description = "Returns specific culture codes suitable for ClinicSettings.Locale, including English and native display names.",
+        Description = "Returns neutral and specific culture codes suitable for ClinicSettings.Locale, including English and native display names.",
         OperationId = "PlatformLookups_ListLocales",
         Tags = new[] { "Platform Lookups" })]
     [ProducesResponseType(typeof(BaseResponse<IReadOnlyList<LocaleLookupResponse>>), StatusCodes.Status200OK)]
