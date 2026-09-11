@@ -13,7 +13,8 @@ public sealed class ApiResponseMessageFilter(IStringLocalizer<ApiMessages> local
         if (context.Result is ObjectResult { Value: BaseResponse response } objectResult)
         {
             var statusCode = objectResult.StatusCode ?? context.HttpContext.Response.StatusCode;
-            var messageKey = ApiResponseMessageSelector.Select(context.HttpContext, response, statusCode);
+            var messageKey = response.MessageKey
+                ?? ApiResponseMessageSelector.Select(context.HttpContext, response, statusCode);
             response.Message = localizer[messageKey].Value;
         }
 
