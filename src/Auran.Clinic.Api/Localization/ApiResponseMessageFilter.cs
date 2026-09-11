@@ -10,8 +10,7 @@ public sealed class ApiResponseMessageFilter(IStringLocalizer<ApiMessages> local
 {
     public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
     {
-        if (context.Result is ObjectResult { Value: BaseResponse response } objectResult
-            && string.IsNullOrWhiteSpace(response.Message))
+        if (context.Result is ObjectResult { Value: BaseResponse response } objectResult)
         {
             var statusCode = objectResult.StatusCode ?? context.HttpContext.Response.StatusCode;
             var messageKey = ApiResponseMessageSelector.Select(context.HttpContext, response, statusCode);
