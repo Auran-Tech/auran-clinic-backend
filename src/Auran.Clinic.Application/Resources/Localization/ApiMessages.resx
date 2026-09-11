@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="RequestSucceeded" xml:space="preserve">
+    <value>Request completed successfully.</value>
+  </data>
+  <data name="DataRetrieved" xml:space="preserve">
+    <value>Data retrieved successfully.</value>
+  </data>
+  <data name="Created" xml:space="preserve">
+    <value>Created successfully.</value>
+  </data>
+  <data name="Updated" xml:space="preserve">
+    <value>Updated successfully.</value>
+  </data>
+  <data name="Deleted" xml:space="preserve">
+    <value>Deleted successfully.</value>
+  </data>
+  <data name="Warning" xml:space="preserve">
+    <value>The request completed with a warning.</value>
+  </data>
+  <data name="ValidationFailed" xml:space="preserve">
+    <value>Validation failed. Please review the submitted data and correct invalid or missing fields.</value>
+  </data>
+  <data name="BadRequest" xml:space="preserve">
+    <value>The request could not be processed because the submitted data is invalid.</value>
+  </data>
+  <data name="Unauthorized" xml:space="preserve">
+    <value>Authentication is required or the access token is invalid or expired.</value>
+  </data>
+  <data name="Forbidden" xml:space="preserve">
+    <value>You do not have permission to perform this action.</value>
+  </data>
+  <data name="NotFound" xml:space="preserve">
+    <value>The requested resource was not found.</value>
+  </data>
+  <data name="Conflict" xml:space="preserve">
+    <value>The request conflicts with the current state of the resource.</value>
+  </data>
+  <data name="TooManyRequests" xml:space="preserve">
+    <value>Too many requests. Please try again later.</value>
+  </data>
+  <data name="InternalServerError" xml:space="preserve">
+    <value>An unexpected error occurred. Please try again later.</value>
+  </data>
+</root>

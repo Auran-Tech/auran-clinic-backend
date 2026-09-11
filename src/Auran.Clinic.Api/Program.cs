@@ -2,14 +2,17 @@ using System.Net;
 using System.Threading.RateLimiting;
 using Auran.Clinic.Api.HealthChecks;
 using Auran.Clinic.Api.Infrastructure;
+using Auran.Clinic.Api.Localization;
 using Auran.Clinic.Api.OpenApi;
 using Auran.Clinic.Api.Validation;
 using Auran.Clinic.Application;
+using Auran.Clinic.Application.Localization;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Localization;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -18,7 +21,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
-builder.Services.AddControllers();
+builder.Services.AddApiLocalization();
+builder.Services.AddControllers(options =>
+    options.Filters.AddService<ApiResponseMessageFilter>());
 builder.Services.AddApiValidation();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -95,12 +100,15 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, cancellationToken) =>
     {
+        var localizer = context.HttpContext.RequestServices
+            .GetRequiredService<IStringLocalizer<ApiMessages>>();
+
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await context.HttpContext.Response.WriteAsJsonAsync(
             new BaseResponse
             {
                 Status = false,
-                Message = "Too many login attempts. Try again later.",
+                Message = localizer[ApiMessageKeys.TooManyRequests].Value,
                 Error = "rate_limit_exceeded"
             },
             cancellationToken);
@@ -129,7 +137,33 @@ builder.Services.AddInfrastructure(builder.Configuration);
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+app.UseRequestLocalization();
 app.UseExceptionHandler();
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    var httpContext = statusCodeContext.HttpContext;
+    if (httpContext.Response.HasStarted)
+        return;
+
+    var (messageKey, error) = httpContext.Response.StatusCode switch
+    {
+        StatusCodes.Status401Unauthorized => (ApiMessageKeys.Unauthorized, "unauthorized"),
+        StatusCodes.Status403Forbidden => (ApiMessageKeys.Forbidden, "forbidden"),
+        StatusCodes.Status404NotFound => (ApiMessageKeys.NotFound, "not_found"),
+        StatusCodes.Status429TooManyRequests => (ApiMessageKeys.TooManyRequests, "rate_limit_exceeded"),
+        >= StatusCodes.Status500InternalServerError => (ApiMessageKeys.InternalServerError, "internal_server_error"),
+        _ => (ApiMessageKeys.BadRequest, "request_failed")
+    };
+
+    var localizer = httpContext.RequestServices.GetRequiredService<IStringLocalizer<ApiMessages>>();
+    httpContext.Response.ContentType = "application/json";
+    await httpContext.Response.WriteAsJsonAsync(new BaseResponse
+    {
+        Status = false,
+        Message = localizer[messageKey].Value,
+        Error = error
+    });
+});
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;

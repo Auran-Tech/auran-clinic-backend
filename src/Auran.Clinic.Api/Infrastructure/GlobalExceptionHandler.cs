@@ -1,9 +1,13 @@
+using Auran.Clinic.Application.Localization;
 using Auran.Clinic.Application.Models;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.Localization;
 
 namespace Auran.Clinic.Api.Infrastructure;
 
-public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public sealed class GlobalExceptionHandler(
+    ILogger<GlobalExceptionHandler> logger,
+    IStringLocalizer<ApiMessages> localizer) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -22,7 +26,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             new BaseResponse
             {
                 Status = false,
-                Message = "An unexpected error occurred.",
+                Message = localizer[ApiMessageKeys.InternalServerError].Value,
                 Error = "internal_server_error"
             },
             cancellationToken);
