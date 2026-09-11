@@ -49,34 +49,32 @@ public sealed class UsersController(
         return MapManagementResult(await userAccountService.CreateAsync(request, cancellationToken), created: true);
     }
 
-    [HttpPut("{userId:guid}")]
+    [HttpPut]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Users.Manage)]
     [SwaggerOperation(
         Summary = "Update a clinic user",
-        Description = "Updates the user's business profile and Identity email/username in the authenticated clinic. Protected Super Users cannot be modified by normal managers.",
+        Description = "Updates the user's business profile and Identity email/username in the authenticated clinic. The request body includes the user identifier. Protected Super Users cannot be modified by normal managers.",
         OperationId = "Users_Update",
         Tags = new[] { "Users" })]
     public async Task<ActionResult<BaseResponse<UserAccountResponse>>> Update(
-        Guid userId,
         [FromBody] UpdateUserRequest request,
         CancellationToken cancellationToken)
     {
-        return MapManagementResult(await userAccountService.UpdateAsync(userId, request, cancellationToken));
+        return MapManagementResult(await userAccountService.UpdateAsync(request.UserId, request, cancellationToken));
     }
 
-    [HttpPut("{userId:guid}/roles")]
+    [HttpPut("roles")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Roles.Manage)]
     [SwaggerOperation(
         Summary = "Replace a clinic user's role assignments",
-        Description = "Replaces the user's protected system-role assignments and revokes all active sessions so new permissions take effect immediately.",
+        Description = "Replaces the user's protected system-role assignments and revokes all active sessions so new permissions take effect immediately. The request body includes the user identifier.",
         OperationId = "Users_SetRoles",
         Tags = new[] { "Users", "RBAC" })]
     public async Task<ActionResult<BaseResponse<UserAccountResponse>>> SetRoles(
-        Guid userId,
         [FromBody] SetUserRolesRequest request,
         CancellationToken cancellationToken)
     {
-        return MapManagementResult(await userAccountService.SetRolesAsync(userId, request, cancellationToken));
+        return MapManagementResult(await userAccountService.SetRolesAsync(request.UserId, request, cancellationToken));
     }
 
     [HttpPut("status")]
