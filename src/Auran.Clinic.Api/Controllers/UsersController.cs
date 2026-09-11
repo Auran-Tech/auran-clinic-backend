@@ -14,6 +14,8 @@ namespace Auran.Clinic.Api.Controllers;
 [Produces("application/json")]
 public sealed class UsersController(
     IUserAccountService userAccountService,
+    IValidator<UpdateUserRequest> updateUserValidator,
+    IValidator<SetUserRolesRequest> setUserRolesValidator,
     IValidator<UpdateUserStatusRequest> updateUserStatusValidator) : ControllerBase
 {
     [HttpGet]
@@ -60,6 +62,10 @@ public sealed class UsersController(
         [FromBody] UpdateUserRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = await updateUserValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure<UserAccountResponse>();
+
         return MapManagementResult(await userAccountService.UpdateAsync(request.UserId, request, cancellationToken));
     }
 
@@ -74,6 +80,10 @@ public sealed class UsersController(
         [FromBody] SetUserRolesRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = await setUserRolesValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure<UserAccountResponse>();
+
         return MapManagementResult(await userAccountService.SetRolesAsync(request.UserId, request, cancellationToken));
     }
 
@@ -96,14 +106,7 @@ public sealed class UsersController(
     {
         var validation = await updateUserStatusValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
-        {
-            return BadRequest(new BaseResponse
-            {
-                Status = false,
-                Message = string.Join("; ", validation.Errors.Select(error => error.ErrorMessage)),
-                Error = "validation_error"
-            });
-        }
+            return ValidationFailure<UserAccountStatusResponse>();
 
         return MapStatusResult(await userAccountService.SetStatusAsync(request, cancellationToken));
     }
@@ -212,4 +215,10 @@ public sealed class UsersController(
                 })
         };
     }
+
+    private BadRequestObjectResult ValidationFailure<T>() where T : class => BadRequest(new BaseResponse<T>
+    {
+        Status = false,
+        Error = "validation_error"
+    });
 }
