@@ -1,6 +1,8 @@
 using Auran.Clinic.Api.Infrastructure;
+using Auran.Clinic.Application.Localization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Auran.Clinic.IntegrationTests;
@@ -10,9 +12,10 @@ public class ExceptionHandlingTests
     [Fact]
     public async Task GlobalExceptionHandler_ReturnsSafeStandardResponse()
     {
-        using var services = new ServiceCollection()
-            .AddLogging()
-            .BuildServiceProvider();
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddLocalization(options => options.ResourcesPath = "Resources");
+        using var services = serviceCollection.BuildServiceProvider();
 
         var context = new DefaultHttpContext
         {
@@ -20,7 +23,10 @@ public class ExceptionHandlingTests
         };
         context.Response.Body = new MemoryStream();
 
-        var handler = new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance);
+        var localizer = services.GetRequiredService<IStringLocalizer<ApiMessages>>();
+        var handler = new GlobalExceptionHandler(
+            NullLogger<GlobalExceptionHandler>.Instance,
+            localizer);
         var handled = await handler.TryHandleAsync(
             context,
             new InvalidOperationException("sensitive implementation detail"),
