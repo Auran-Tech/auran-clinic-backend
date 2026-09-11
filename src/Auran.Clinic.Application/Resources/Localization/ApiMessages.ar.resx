@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="RequestSucceeded" xml:space="preserve">
+    <value>تم تنفيذ الطلب بنجاح.</value>
+  </data>
+  <data name="DataRetrieved" xml:space="preserve">
+    <value>تم استرجاع البيانات بنجاح.</value>
+  </data>
+  <data name="Created" xml:space="preserve">
+    <value>تم الإنشاء بنجاح.</value>
+  </data>
+  <data name="Updated" xml:space="preserve">
+    <value>تم التحديث بنجاح.</value>
+  </data>
+  <data name="Deleted" xml:space="preserve">
+    <value>تم الحذف بنجاح.</value>
+  </data>
+  <data name="Warning" xml:space="preserve">
+    <value>تم تنفيذ الطلب مع وجود تنبيه.</value>
+  </data>
+  <data name="ValidationFailed" xml:space="preserve">
+    <value>فشل التحقق من صحة البيانات. يرجى مراجعة البيانات المرسلة وتصحيح الحقول غير الصحيحة أو المطلوبة.</value>
+  </data>
+  <data name="BadRequest" xml:space="preserve">
+    <value>تعذر معالجة الطلب لأن البيانات المرسلة غير صحيحة.</value>
+  </data>
+  <data name="Unauthorized" xml:space="preserve">
+    <value>يلزم تسجيل الدخول، أو أن رمز الوصول غير صالح أو منتهي الصلاحية.</value>
+  </data>
+  <data name="Forbidden" xml:space="preserve">
+    <value>ليس لديك صلاحية لتنفيذ هذا الإجراء.</value>
+  </data>
+  <data name="NotFound" xml:space="preserve">
+    <value>لم يتم العثور على المورد المطلوب.</value>
+  </data>
+  <data name="Conflict" xml:space="preserve">
+    <value>يتعارض الطلب مع الحالة الحالية للبيانات.</value>
+  </data>
+  <data name="TooManyRequests" xml:space="preserve">
+    <value>تم إرسال عدد كبير جدًا من الطلبات. يرجى المحاولة مرة أخرى لاحقًا.</value>
+  </data>
+  <data name="InternalServerError" xml:space="preserve">
+    <value>حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى لاحقًا.</value>
+  </data>
+</root>
