@@ -35,7 +35,10 @@ public sealed class SystemLookupService : ISystemLookupService
 
     private static IReadOnlyList<LocaleLookupResponse> BuildLocales()
     {
-        return CultureInfo.GetCultures(CultureTypes.SpecificCultures)
+        const CultureTypes supportedCultureTypes =
+            CultureTypes.NeutralCultures | CultureTypes.SpecificCultures;
+
+        return CultureInfo.GetCultures(supportedCultureTypes)
             .Where(culture => !string.IsNullOrWhiteSpace(culture.Name))
             .GroupBy(culture => culture.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
