@@ -9,24 +9,12 @@ public static class ApiValidationServiceCollectionExtensions
     {
         services.Configure<ApiBehaviorOptions>(options =>
         {
-            options.InvalidModelStateResponseFactory = context =>
-            {
-                var errors = context.ModelState
-                    .SelectMany(entry => entry.Value?.Errors.Select(error =>
-                        string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? $"{entry.Key} is invalid."
-                            : error.ErrorMessage) ?? [])
-                    .Where(error => !string.IsNullOrWhiteSpace(error))
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray();
-
-                return new BadRequestObjectResult(new BaseResponse
+            options.InvalidModelStateResponseFactory = _ =>
+                new BadRequestObjectResult(new BaseResponse
                 {
                     Status = false,
-                    Message = "Validation failed.",
-                    Error = string.Join(" ", errors)
+                    Error = "validation_error"
                 });
-            };
         });
 
         return services;
