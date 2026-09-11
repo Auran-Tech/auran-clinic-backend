@@ -1,3 +1,4 @@
+using Auran.Clinic.Application.Localization;
 using Auran.Clinic.Application.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,4 +19,11 @@ public sealed class MessageProbeController : ControllerBase
 
     [HttpDelete]
     public ActionResult<BaseResponse> Delete() => Ok(new BaseResponse { Status = true });
+
+    [HttpPost("warning")]
+    public ActionResult<BaseResponse> Warning() => Ok(new BaseResponse
+    {
+        Status = true,
+        MessageKey = ApiMessageKeys.Warning
+    });
 }
