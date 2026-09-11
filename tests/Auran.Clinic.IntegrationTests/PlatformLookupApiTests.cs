@@ -58,6 +58,8 @@ public sealed class PlatformLookupApiTests
         Assert.NotNull(localesEnvelope?.Data);
         Assert.NotEmpty(localesEnvelope.Data);
         Assert.Contains(localesEnvelope.Data, locale =>
+            locale.Code.Equals("en", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(localesEnvelope.Data, locale =>
             locale.Code.Equals("ar-EG", StringComparison.OrdinalIgnoreCase));
     }
 
