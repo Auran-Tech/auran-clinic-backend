@@ -21,12 +21,12 @@ public sealed class SystemLookupServiceTests
             Assert.False(string.IsNullOrWhiteSpace(timeZone.Id));
             Assert.False(string.IsNullOrWhiteSpace(timeZone.DisplayName));
             Assert.Matches("^[+-]\\d{2}:\\d{2}$", timeZone.UtcOffset);
-            Assert.Contains(timeZone.Id, timeZone.DisplayName, StringComparison.OrdinalIgnoreCase);
+            Assert.True(timeZone.DisplayName.Contains(timeZone.Id, StringComparison.OrdinalIgnoreCase));
         });
     }
 
     [Fact]
-    public void GetLocales_ReturnsUniqueSpecificCultures()
+    public void GetLocales_ReturnsUniqueNeutralAndSpecificCultures()
     {
         var locales = _service.GetLocales();
 
@@ -34,6 +34,8 @@ public sealed class SystemLookupServiceTests
         Assert.Equal(
             locales.Count,
             locales.Select(locale => locale.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(locales, locale => locale.Code.Equals("en", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(locales, locale => locale.Code.Equals("ar", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(locales, locale => locale.Code.Equals("en-US", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(locales, locale => locale.Code.Equals("ar-EG", StringComparison.OrdinalIgnoreCase));
 
