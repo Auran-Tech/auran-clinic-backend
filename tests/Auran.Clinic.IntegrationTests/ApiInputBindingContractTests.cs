@@ -18,7 +18,8 @@ public sealed class ApiInputBindingContractTests
                 var actionTemplates = item.Action
                     .GetCustomAttributes<HttpMethodAttribute>()
                     .Select(attribute => attribute.Template)
-                    .Where(template => !string.IsNullOrWhiteSpace(template))!;
+                    .Where(template => !string.IsNullOrWhiteSpace(template))
+                    .Select(template => template!);
 
                 return controllerTemplates
                     .Concat(actionTemplates)
@@ -41,6 +42,7 @@ public sealed class ApiInputBindingContractTests
         {
             var clientParameters = action.GetParameters()
                 .Where(parameter => parameter.ParameterType != typeof(CancellationToken))
+                .Where(parameter => parameter.GetCustomAttribute<FromServicesAttribute>() is null)
                 .ToArray();
 
             var sources = new List<string>();
@@ -72,7 +74,7 @@ public sealed class ApiInputBindingContractTests
 
         Assert.True(
             violations.Count == 0,
-            $"Each endpoint must use exactly one client input style: Body, Query, or Form. Violations: {string.Join(" | ", violations)}");
+            $"Each endpoint must use one client input style only: Body, Query, or Form. Violations: {string.Join(" | ", violations)}");
     }
 
     private static IEnumerable<(Type Controller, MethodInfo Action)> GetControllerActions()
@@ -97,8 +99,6 @@ public sealed class ApiInputBindingContractTests
             return "Form";
         if (parameter.GetCustomAttribute<FromRouteAttribute>() is not null)
             return "Route";
-        if (parameter.GetCustomAttribute<FromServicesAttribute>() is not null)
-            return null;
 
         return null;
     }
