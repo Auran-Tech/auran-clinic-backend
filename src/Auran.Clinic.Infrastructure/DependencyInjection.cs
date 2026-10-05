@@ -149,6 +149,7 @@ public static class DependencyInjection
         services.AddSingleton<ISystemLookupService, SystemLookupService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
+        services.AddScoped<IRoleCatalogService, RoleCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();
         services.AddScoped<IPatientService, PatientService>();
         services.AddScoped<IPatientClinicalProfileService, PatientClinicalProfileService>();
