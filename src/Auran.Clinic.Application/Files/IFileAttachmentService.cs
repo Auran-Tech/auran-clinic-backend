@@ -14,6 +14,10 @@ public interface IFileAttachmentService
         long size,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyCollection<FileAttachmentResponse>?> ListClinicalOrderFilesAsync(
+        Guid visitId,
+        CancellationToken cancellationToken = default);
+
     Task<FileAttachmentResponse?> UploadClinicalOrderFileAsync(
         ClinicalOrderAttachmentUploadMetadata metadata,
         Stream content,
