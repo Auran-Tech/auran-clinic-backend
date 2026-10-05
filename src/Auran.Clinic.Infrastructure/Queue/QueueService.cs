@@ -61,6 +61,13 @@ public sealed class QueueService(
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var transitions = await dbContext.WorkflowTransitions
+            .AsNoTracking()
+            .Select(transition => new QueueTransitionResponse(
+                transition.FromStatusId,
+                transition.ToStatusId))
+            .ToListAsync(cancellationToken);
+
         return new QueueBoardResponse(
             statuses,
             rows.Select(row => Map(
@@ -69,7 +76,8 @@ public sealed class QueueService(
                 row.Patient.FullName,
                 row.DoctorName,
                 row.Status)).ToList(),
-            staff);
+            staff,
+            transitions);
     }
 
     public async Task<QueueMutationResult> CheckInAsync(
