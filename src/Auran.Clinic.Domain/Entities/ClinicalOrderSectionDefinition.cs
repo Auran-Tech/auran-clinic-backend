@@ -4,6 +4,7 @@ namespace Auran.Clinic.Domain.Entities;
 
 public class ClinicalOrderSectionDefinition : ClinicEntity
 {
+    public required string Code { get; set; }
     public required string Name { get; set; }
     public ClinicalOrderSectionType SectionType { get; set; }
     public int SortOrder { get; set; }
