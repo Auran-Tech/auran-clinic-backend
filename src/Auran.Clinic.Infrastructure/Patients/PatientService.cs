@@ -42,12 +42,11 @@ public sealed class PatientService(
             .ThenBy(patient => patient.PatientNumber)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(patient => Map(patient))
             .ToListAsync(cancellationToken);
 
         return new PaginatedResponse<PatientResponse>
         {
-            Data = patients,
+            Data = patients.Select(Map).ToList(),
             Setting = new PaginationInfo
             {
                 TotalCount = totalCount,
@@ -61,11 +60,11 @@ public sealed class PatientService(
         Guid patientId,
         CancellationToken cancellationToken = default)
     {
-        return await dbContext.Patients
+        var patient = await dbContext.Patients
             .AsNoTracking()
-            .Where(patient => patient.Id == patientId)
-            .Select(patient => Map(patient))
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(patient => patient.Id == patientId, cancellationToken);
+
+        return patient is null ? null : Map(patient);
     }
 
     public async Task<PatientDuplicateCheckResponse> CheckDuplicatesAsync(
