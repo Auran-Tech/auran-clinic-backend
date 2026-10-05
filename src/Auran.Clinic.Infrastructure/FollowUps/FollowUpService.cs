@@ -218,8 +218,8 @@ public sealed class FollowUpService(
         if (!clinicId.HasValue)
             return DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var timeZoneId = await dbContext.ClinicSettings.AsNoTracking()
-            .Where(item => item.ClinicId == clinicId.Value)
+        var timeZoneId = await dbContext.Clinics.AsNoTracking()
+            .Where(item => item.Id == clinicId.Value)
             .Select(item => item.TimeZoneId)
             .SingleOrDefaultAsync(cancellationToken);
 
