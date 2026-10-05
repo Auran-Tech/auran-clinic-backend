@@ -9,7 +9,7 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
     public async Task Cors_AllowsConfiguredDevelopmentOrigin()
     {
         using var client = CreateHttpsClient();
-        using var request = CreatePreflightRequest("http://localhost:4200");
+        using var request = CreatePreflightRequest("http://localhost:5173");
 
         using var response = await client.SendAsync(request);
 
