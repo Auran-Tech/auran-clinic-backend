@@ -4,6 +4,7 @@ using Auran.Clinic.Application.Settings;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using DomainClinic = Auran.Clinic.Domain.Entities.Clinic;
 
 namespace Auran.Clinic.Infrastructure.Settings;
 
@@ -100,7 +101,7 @@ public sealed class ClinicSettingsService(
         return Map(clinic, settings);
     }
 
-    private static ClinicSettingsResponse Map(Clinic clinic, ClinicSettings? settings) =>
+    private static ClinicSettingsResponse Map(DomainClinic clinic, ClinicSettings? settings) =>
         new(
             clinic.Name,
             clinic.Code,
