@@ -119,7 +119,7 @@ public sealed class PatientApiTests
             });
         Assert.Equal(HttpStatusCode.Created, allergyResponse.StatusCode);
 
-        var profileResponse = await client.GetAsync($"/api/patient-profile?patientId={created.Data.Id}");
+        var profileResponse = await client.PostAsJsonAsync("/api/patient-profile/details", new PatientLookupRequest { PatientId = created.Data.Id });
         profileResponse.EnsureSuccessStatusCode();
         var profile = await profileResponse.Content
             .ReadFromJsonAsync<BaseResponse<PatientClinicalProfileResponse>>();
@@ -143,7 +143,7 @@ public sealed class PatientApiTests
         using var client = factory.CreateClient();
         await AuthenticateAsync(client, account);
 
-        var response = await client.GetAsync($"/api/patients/details?patientId={otherPatientId}");
+        var response = await client.PostAsJsonAsync("/api/patients/details", new PatientLookupRequest { PatientId = otherPatientId });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
