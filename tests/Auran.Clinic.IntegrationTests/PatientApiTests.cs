@@ -101,7 +101,7 @@ public sealed class PatientApiTests
         using var client = factory.CreateClient();
         await AuthenticateAsync(client, account);
 
-        var response = await client.GetAsync($"/api/patients/{otherPatientId}");
+        var response = await client.GetAsync($"/api/patients/details?patientId={otherPatientId}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
