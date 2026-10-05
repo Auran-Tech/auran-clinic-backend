@@ -65,11 +65,24 @@ public sealed class SaveVisitDraftRequest
     public string? TreatmentPlan { get; init; }
 }
 
+public sealed class CompleteVisitRequest
+{
+    public Guid VisitId { get; init; }
+    public required string RowVersion { get; init; }
+}
+
+public sealed class FinalizeVisitDocumentationRequest
+{
+    public Guid VisitId { get; init; }
+    public required string RowVersion { get; init; }
+}
+
 public enum VisitMutationOutcome
 {
     Success,
     NotFound,
     Conflict,
+    ConfigurationRequired,
     ValidationError,
     Unauthenticated
 }
@@ -113,5 +126,23 @@ public sealed class SaveVisitDraftRequestValidator : AbstractValidator<SaveVisit
         RuleFor(x => x.Diagnosis).MaximumLength(8000);
         RuleFor(x => x.Notes).MaximumLength(12000);
         RuleFor(x => x.TreatmentPlan).MaximumLength(12000);
+    }
+}
+
+public sealed class CompleteVisitRequestValidator : AbstractValidator<CompleteVisitRequest>
+{
+    public CompleteVisitRequestValidator()
+    {
+        RuleFor(x => x.VisitId).NotEmpty();
+        RuleFor(x => x.RowVersion).NotEmpty();
+    }
+}
+
+public sealed class FinalizeVisitDocumentationRequestValidator : AbstractValidator<FinalizeVisitDocumentationRequest>
+{
+    public FinalizeVisitDocumentationRequestValidator()
+    {
+        RuleFor(x => x.VisitId).NotEmpty();
+        RuleFor(x => x.RowVersion).NotEmpty();
     }
 }
