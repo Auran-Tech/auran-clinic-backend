@@ -100,7 +100,7 @@ public sealed class ClinicSettingsService(
         return Map(clinic, settings);
     }
 
-    private static ClinicSettingsResponse Map(Domain.Entities.Clinic clinic, ClinicSettings? settings) =>
+    private static ClinicSettingsResponse Map(Clinic clinic, ClinicSettings? settings) =>
         new(
             clinic.Name,
             clinic.Code,
