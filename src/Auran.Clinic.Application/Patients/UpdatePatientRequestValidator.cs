@@ -6,6 +6,7 @@ public sealed class UpdatePatientRequestValidator : AbstractValidator<UpdatePati
 {
     public UpdatePatientRequestValidator()
     {
+        RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.FullName).NotEmpty().MaximumLength(256);
         RuleFor(x => x.Phone).NotEmpty().MaximumLength(64);
         RuleFor(x => x.Gender).MaximumLength(32);
