@@ -23,6 +23,10 @@ public sealed record VisitSummaryResponse(
     DateTime? CompletedAtUtc,
     string RowVersion);
 
+public sealed record VisitDoctorResponse(
+    Guid Id,
+    string FullName);
+
 public sealed record VisitDetailsResponse(
     VisitSummaryResponse Visit,
     string? ChiefComplaint,
@@ -30,7 +34,8 @@ public sealed record VisitDetailsResponse(
     string? Diagnosis,
     string? Notes,
     string? TreatmentPlan,
-    IReadOnlyCollection<VisitSessionResponse> Sessions);
+    IReadOnlyCollection<VisitSessionResponse> Sessions,
+    IReadOnlyCollection<VisitDoctorResponse> AvailableDoctors);
 
 public sealed class VisitLookupRequest
 {
