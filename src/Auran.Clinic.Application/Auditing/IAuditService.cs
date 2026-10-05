@@ -17,6 +17,7 @@ public interface IAuditService
 public sealed record AuditLogResponse(
     Guid Id,
     Guid ActorUserId,
+    string ActorName,
     string Action,
     string EntityType,
     string? EntityId,
