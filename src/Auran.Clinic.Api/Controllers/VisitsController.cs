@@ -16,7 +16,9 @@ public sealed class VisitsController(
     IValidator<VisitLookupRequest> lookupValidator,
     IValidator<StartVisitSessionRequest> startSessionValidator,
     IValidator<EndVisitSessionRequest> endSessionValidator,
-    IValidator<SaveVisitDraftRequest> saveDraftValidator) : ControllerBase
+    IValidator<SaveVisitDraftRequest> saveDraftValidator,
+    IValidator<CompleteVisitRequest> completeValidator,
+    IValidator<FinalizeVisitDocumentationRequest> finalizeDocumentationValidator) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
@@ -87,6 +89,33 @@ public sealed class VisitsController(
         return MapMutation(await visitService.SaveDraftAsync(request, cancellationToken));
     }
 
+
+    [HttpPut("complete")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
+    public async Task<ActionResult<BaseResponse<VisitDetailsResponse>>> Complete(
+        [FromBody] CompleteVisitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await completeValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse<VisitDetailsResponse> { Status = false, Error = "validation_error" });
+
+        return MapMutation(await visitService.CompleteAsync(request, cancellationToken));
+    }
+
+    [HttpPut("documentation/finalize")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
+    public async Task<ActionResult<BaseResponse<VisitDetailsResponse>>> FinalizeDocumentation(
+        [FromBody] FinalizeVisitDocumentationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await finalizeDocumentationValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse<VisitDetailsResponse> { Status = false, Error = "validation_error" });
+
+        return MapMutation(await visitService.FinalizeDocumentationAsync(request, cancellationToken));
+    }
+
     private ActionResult<BaseResponse<VisitDetailsResponse>> MapMutation(VisitMutationResult result)
     {
         return result.Outcome switch
@@ -106,6 +135,12 @@ public sealed class VisitsController(
                 Status = false,
                 Message = result.Error ?? "Visit changed by another user.",
                 Error = "visit_conflict"
+            }),
+            VisitMutationOutcome.ConfigurationRequired => Conflict(new BaseResponse
+            {
+                Status = false,
+                Message = result.Error ?? "Visit workflow configuration is incomplete.",
+                Error = "visit_configuration_required"
             }),
             VisitMutationOutcome.ValidationError => BadRequest(new BaseResponse
             {
