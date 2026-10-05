@@ -145,6 +145,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();
         services.AddScoped<IPatientService, PatientService>();
+        services.AddScoped<IPatientClinicalProfileService, PatientClinicalProfileService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
