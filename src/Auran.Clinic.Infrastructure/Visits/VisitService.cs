@@ -77,6 +77,18 @@ public sealed class VisitService(
                     session.EndedAtUtc))
             .ToListAsync(cancellationToken);
 
+        var availableDoctors = await (
+                from user in dbContext.Users.AsNoTracking()
+                join userRole in dbContext.UserRoles.AsNoTracking()
+                    on user.Id equals userRole.UserId
+                join role in dbContext.Roles.AsNoTracking()
+                    on userRole.RoleId equals role.Id
+                where user.IsActive && role.Code == SystemRoleCatalog.Doctor
+                orderby user.FullName
+                select new VisitDoctorResponse(user.Id, user.FullName))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         return new VisitDetailsResponse(
             new VisitSummaryResponse(
                 visitRow.Visit.Id,
@@ -95,7 +107,8 @@ public sealed class VisitService(
             visitRow.Visit.Diagnosis,
             visitRow.Visit.Notes,
             visitRow.Visit.TreatmentPlan,
-            sessions);
+            sessions,
+            availableDoctors);
     }
 
     public async Task<VisitMutationResult> StartSessionAsync(
