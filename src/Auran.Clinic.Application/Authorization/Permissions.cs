@@ -2,6 +2,11 @@ namespace Auran.Clinic.Application.Authorization;
 
 public static class Permissions
 {
+    public static class Dashboard
+    {
+        public const string View = "Dashboard_View";
+    }
+
     public static class Audit
     {
         public const string View = "Audit_View";
