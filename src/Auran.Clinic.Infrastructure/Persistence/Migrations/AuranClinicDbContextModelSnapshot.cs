@@ -38,6 +38,11 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<Guid?>("CreateByUserId")
                         .HasColumnType("uniqueidentifier");
 
@@ -577,6 +582,9 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ClinicId");
+
+                    b.HasIndex("ClinicId", "Code")
+                        .IsUnique();
 
                     b.ToTable("ClinicalOrderSectionDefinitions");
                 });
