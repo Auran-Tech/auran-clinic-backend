@@ -140,6 +140,39 @@ public sealed class FileAttachmentService(
         }
     }
 
+    public async Task<IReadOnlyCollection<FileAttachmentResponse>?> ListClinicalOrderFilesAsync(
+        Guid visitId,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await dbContext.ClinicalOrders
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.VisitId == visitId, cancellationToken);
+        if (order is null)
+            return [];
+
+        return await (
+                from attachment in dbContext.ClinicalOrderAttachments.AsNoTracking()
+                join file in dbContext.Files.AsNoTracking()
+                    on attachment.FileId equals file.Id
+                join section in dbContext.ClinicalOrderSections.AsNoTracking()
+                    on attachment.ClinicalOrderSectionId equals section.Id into sectionJoin
+                from section in sectionJoin.DefaultIfEmpty()
+                join definition in dbContext.ClinicalOrderSectionDefinitions.AsNoTracking()
+                    on section.SectionDefinitionId equals definition.Id into definitionJoin
+                from definition in definitionJoin.DefaultIfEmpty()
+                where attachment.ClinicalOrderId == order.Id
+                orderby file.UploadedAtUtc descending
+                select new FileAttachmentResponse(
+                    file.Id,
+                    file.OriginalName,
+                    file.ContentType,
+                    file.Size,
+                    file.UploadedAtUtc,
+                    definition == null ? null : definition.Code,
+                    null))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<FileAttachmentResponse?> UploadClinicalOrderFileAsync(
         ClinicalOrderAttachmentUploadMetadata metadata,
         Stream content,
