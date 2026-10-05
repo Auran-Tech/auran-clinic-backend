@@ -17,6 +17,7 @@ public static class SystemRoleCatalog
             Receptionist,
             "Receptionist",
             [
+                Permissions.Dashboard.View,
                 Permissions.Patients.View,
                 Permissions.Patients.Create,
                 Permissions.Patients.Update,
@@ -33,6 +34,7 @@ public static class SystemRoleCatalog
             Doctor,
             "Doctor",
             [
+                Permissions.Dashboard.View,
                 Permissions.Patients.View,
                 Permissions.Visits.View,
                 Permissions.Visits.Start,
@@ -49,6 +51,7 @@ public static class SystemRoleCatalog
             Nurse,
             "Nurse",
             [
+                Permissions.Dashboard.View,
                 Permissions.Patients.View,
                 Permissions.Queue.View,
                 Permissions.Queue.Move,
