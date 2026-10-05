@@ -15,7 +15,7 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
-        Assert.Contains("http://localhost:4200", origins);
+        Assert.Contains("http://localhost:5173", origins);
     }
 
     [Fact]
