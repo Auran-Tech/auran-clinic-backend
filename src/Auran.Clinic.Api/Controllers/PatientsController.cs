@@ -39,7 +39,7 @@ public sealed class PatientsController(
         });
     }
 
-    [HttpGet("{patientId:guid}")]
+    [HttpGet("details")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.View)]
     [SwaggerOperation(
         Summary = "Get patient details",
@@ -47,7 +47,7 @@ public sealed class PatientsController(
         OperationId = "Patients_Get",
         Tags = new[] { "Patients" })]
     public async Task<ActionResult<BaseResponse<PatientResponse>>> Get(
-        Guid patientId,
+        [FromQuery] Guid patientId,
         CancellationToken cancellationToken)
     {
         var patient = await patientService.GetAsync(patientId, cancellationToken);
@@ -100,7 +100,7 @@ public sealed class PatientsController(
         return MapMutation(await patientService.CreateAsync(request, cancellationToken), created: true);
     }
 
-    [HttpPut("{patientId:guid}")]
+    [HttpPut]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.Update)]
     [SwaggerOperation(
         Summary = "Update basic patient details",
@@ -108,7 +108,6 @@ public sealed class PatientsController(
         OperationId = "Patients_Update",
         Tags = new[] { "Patients" })]
     public async Task<ActionResult<BaseResponse<PatientResponse>>> Update(
-        Guid patientId,
         [FromBody] UpdatePatientRequest request,
         CancellationToken cancellationToken)
     {
@@ -116,7 +115,7 @@ public sealed class PatientsController(
         if (!validation.IsValid)
             return ValidationFailure<PatientResponse>();
 
-        return MapMutation(await patientService.UpdateAsync(patientId, request, cancellationToken));
+        return MapMutation(await patientService.UpdateAsync(request.PatientId, request, cancellationToken));
     }
 
     private ActionResult<BaseResponse<PatientResponse>> MapMutation(
