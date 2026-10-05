@@ -609,7 +609,6 @@ public sealed class WorkflowVisitTenantForeignKeyTests(ApiFactory factory) : ICl
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
-            Code = name.Trim().ToUpperInvariant().Replace(" ", "_"),
             Name = name,
             FieldType = DynamicFieldType.Number,
             IsEnabled = true,
@@ -629,6 +628,7 @@ public sealed class WorkflowVisitTenantForeignKeyTests(ApiFactory factory) : ICl
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
+            Code = name.Trim().ToUpperInvariant().Replace(" ", "_"),
             Name = name,
             SectionType = ClinicalOrderSectionType.Structured,
             IsEnabled = true,
