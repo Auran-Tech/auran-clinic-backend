@@ -9,6 +9,7 @@ using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.Lookups;
 using Auran.Clinic.Application.Patients;
 using Auran.Clinic.Application.FollowUps;
+using Auran.Clinic.Application.Files;
 using Auran.Clinic.Application.Queue;
 using Auran.Clinic.Application.Reports;
 using Auran.Clinic.Application.Settings;
@@ -26,6 +27,7 @@ using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Lookups;
 using Auran.Clinic.Infrastructure.Patients;
 using Auran.Clinic.Infrastructure.FollowUps;
+using Auran.Clinic.Infrastructure.Files;
 using Auran.Clinic.Infrastructure.Queue;
 using Auran.Clinic.Infrastructure.Reports;
 using Auran.Clinic.Infrastructure.Settings;
@@ -62,6 +64,9 @@ public static class DependencyInjection
 
         services.Configure<PlatformBootstrapOptions>(
             configuration.GetSection(PlatformBootstrapOptions.SectionName));
+
+        services.Configure<FileStorageOptions>(
+            configuration.GetSection(FileStorageOptions.SectionName));
 
         services.AddIdentityCore<ApplicationIdentityUser>(options =>
         {
@@ -168,6 +173,8 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowSettingsService, WorkflowSettingsService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IClinicalOrderService, ClinicalOrderService>();
+        services.AddScoped<IFileStorage, LocalFileStorage>();
+        services.AddScoped<IFileAttachmentService, FileAttachmentService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
