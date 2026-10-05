@@ -30,10 +30,15 @@ public sealed record QueueStaffResponse(
     Guid Id,
     string FullName);
 
+public sealed record QueueTransitionResponse(
+    Guid FromStatusId,
+    Guid ToStatusId);
+
 public sealed record QueueBoardResponse(
     IReadOnlyCollection<QueueWorkflowStatusResponse> Statuses,
     IReadOnlyCollection<QueueEntryResponse> Entries,
-    IReadOnlyCollection<QueueStaffResponse> Staff);
+    IReadOnlyCollection<QueueStaffResponse> Staff,
+    IReadOnlyCollection<QueueTransitionResponse> Transitions);
 
 public sealed class QueueCheckInRequest
 {
