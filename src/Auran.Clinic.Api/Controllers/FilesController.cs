@@ -22,7 +22,7 @@ public sealed class FilesController(
     IOptions<FileStorageOptions> storageOptions) : ControllerBase
 {
     [HttpPost("patient/list")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.MedicalProfile.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     public async Task<ActionResult<BaseResponse<IReadOnlyCollection<FileAttachmentResponse>>>> PatientFiles(
         [FromBody] PatientAttachmentLookupRequest request,
         CancellationToken cancellationToken)
@@ -39,7 +39,7 @@ public sealed class FilesController(
     }
 
     [HttpPost("patient/upload")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.MedicalProfile.Edit)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.Upload)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<BaseResponse<FileAttachmentResponse>>> UploadPatientFile(
         [FromForm] PatientFileUploadForm request,
@@ -84,7 +84,7 @@ public sealed class FilesController(
     }
 
     [HttpPost("clinical-order/list")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     public async Task<ActionResult<BaseResponse<IReadOnlyCollection<FileAttachmentResponse>>>> ClinicalOrderFiles(
         [FromBody] ClinicalOrderFileListRequest request,
         CancellationToken cancellationToken)
@@ -100,7 +100,7 @@ public sealed class FilesController(
     }
 
     [HttpPost("clinical-order/upload")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.Upload)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<BaseResponse<FileAttachmentResponse>>> UploadClinicalOrderFile(
         [FromForm] ClinicalOrderFileUploadForm request,
@@ -144,7 +144,7 @@ public sealed class FilesController(
     }
 
     [HttpPost("download")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.MedicalProfile.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     public async Task<IActionResult> Download(
         [FromBody] FileDownloadRequest request,
         CancellationToken cancellationToken)
