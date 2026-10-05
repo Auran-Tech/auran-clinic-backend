@@ -16,7 +16,8 @@ public sealed class PatientsController(
     IPatientService patientService,
     IValidator<CreatePatientRequest> createValidator,
     IValidator<UpdatePatientRequest> updateValidator,
-    IValidator<PatientDuplicateCheckRequest> duplicateValidator) : ControllerBase
+    IValidator<PatientDuplicateCheckRequest> duplicateValidator,
+    IValidator<PatientLookupRequest> lookupValidator) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.View)]
@@ -39,7 +40,7 @@ public sealed class PatientsController(
         });
     }
 
-    [HttpGet("details")]
+    [HttpPost("details")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.View)]
     [SwaggerOperation(
         Summary = "Get patient details",
@@ -47,10 +48,14 @@ public sealed class PatientsController(
         OperationId = "Patients_Get",
         Tags = new[] { "Patients" })]
     public async Task<ActionResult<BaseResponse<PatientResponse>>> Get(
-        [FromQuery] Guid patientId,
+        [FromBody] PatientLookupRequest request,
         CancellationToken cancellationToken)
     {
-        var patient = await patientService.GetAsync(patientId, cancellationToken);
+        var validation = await lookupValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure<PatientResponse>();
+
+        var patient = await patientService.GetAsync(request.PatientId, cancellationToken);
         if (patient is null)
         {
             return NotFound(new BaseResponse
