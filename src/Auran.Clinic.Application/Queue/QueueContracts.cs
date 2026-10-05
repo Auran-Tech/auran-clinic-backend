@@ -26,9 +26,14 @@ public sealed record QueueEntryResponse(
     DateTime? ExitAtUtc,
     string RowVersion);
 
+public sealed record QueueStaffResponse(
+    Guid Id,
+    string FullName);
+
 public sealed record QueueBoardResponse(
     IReadOnlyCollection<QueueWorkflowStatusResponse> Statuses,
-    IReadOnlyCollection<QueueEntryResponse> Entries);
+    IReadOnlyCollection<QueueEntryResponse> Entries,
+    IReadOnlyCollection<QueueStaffResponse> Staff);
 
 public sealed class QueueCheckInRequest
 {
