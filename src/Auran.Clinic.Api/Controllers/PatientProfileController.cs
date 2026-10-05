@@ -16,9 +16,10 @@ public sealed class PatientProfileController(
     IPatientClinicalProfileService profileService,
     IValidator<AddPatientAllergyRequest> allergyValidator,
     IValidator<AddPatientConditionRequest> conditionValidator,
-    IValidator<AddPatientMedicationRequest> medicationValidator) : ControllerBase
+    IValidator<AddPatientMedicationRequest> medicationValidator,
+    IValidator<PatientLookupRequest> lookupValidator) : ControllerBase
 {
-    [HttpGet]
+    [HttpPost("details")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.MedicalProfile.View)]
     [SwaggerOperation(
         Summary = "Get patient clinical profile",
@@ -26,10 +27,18 @@ public sealed class PatientProfileController(
         OperationId = "PatientProfile_Get",
         Tags = new[] { "Patient Profile" })]
     public async Task<ActionResult<BaseResponse<PatientClinicalProfileResponse>>> Get(
-        [FromQuery] Guid patientId,
+        [FromBody] PatientLookupRequest request,
         CancellationToken cancellationToken)
     {
-        var profile = await profileService.GetAsync(patientId, cancellationToken);
+        var validation = await lookupValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse<PatientClinicalProfileResponse>
+            {
+                Status = false,
+                Error = "validation_error"
+            });
+
+        var profile = await profileService.GetAsync(request.PatientId, cancellationToken);
         if (profile is null)
             return NotFound(new BaseResponse { Status = false, Message = "Patient not found." });
 
