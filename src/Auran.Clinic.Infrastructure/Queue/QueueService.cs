@@ -48,6 +48,13 @@ public sealed class QueueService(
                 })
             .ToListAsync(cancellationToken);
 
+        var staff = await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.IsActive)
+            .OrderBy(user => user.FullName)
+            .Select(user => new QueueStaffResponse(user.Id, user.FullName))
+            .ToListAsync(cancellationToken);
+
         return new QueueBoardResponse(
             statuses,
             rows.Select(row => Map(
@@ -55,7 +62,8 @@ public sealed class QueueService(
                 row.Patient.PatientNumber,
                 row.Patient.FullName,
                 row.DoctorName,
-                row.Status)).ToList());
+                row.Status)).ToList(),
+            staff);
     }
 
     public async Task<QueueMutationResult> CheckInAsync(
