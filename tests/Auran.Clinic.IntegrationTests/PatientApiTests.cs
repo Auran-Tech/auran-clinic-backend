@@ -90,6 +90,48 @@ public sealed class PatientApiTests
     }
 
     [Fact]
+    public async Task ClinicalProfile_AddAllergyAndReadProfile_ReturnsTenantScopedHistory()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateSuperUserAsync(factory, clinicId);
+        using var client = factory.CreateClient();
+        await AuthenticateAsync(client, account);
+
+        var createResponse = await client.PostAsJsonAsync(
+            "/api/patients",
+            new CreatePatientRequest
+            {
+                FullName = "Clinical Profile Patient",
+                Phone = "0100 991 2233"
+            });
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<BaseResponse<PatientResponse>>();
+        Assert.NotNull(created?.Data);
+
+        var allergyResponse = await client.PostAsJsonAsync(
+            "/api/patient-profile/allergies",
+            new AddPatientAllergyRequest
+            {
+                PatientId = created.Data.Id,
+                Name = "Penicillin",
+                Reaction = "Rash"
+            });
+        Assert.Equal(HttpStatusCode.Created, allergyResponse.StatusCode);
+
+        var profileResponse = await client.GetAsync($"/api/patient-profile?patientId={created.Data.Id}");
+        profileResponse.EnsureSuccessStatusCode();
+        var profile = await profileResponse.Content
+            .ReadFromJsonAsync<BaseResponse<PatientClinicalProfileResponse>>();
+
+        Assert.NotNull(profile?.Data);
+        Assert.Equal(created.Data.Id, profile.Data.Patient.Id);
+        var allergy = Assert.Single(profile.Data.Allergies);
+        Assert.Equal("Penicillin", allergy.Name);
+        Assert.Equal("Rash", allergy.Reaction);
+    }
+
+    [Fact]
     public async Task Get_CrossClinicPatient_ReturnsNotFound()
     {
         await using var factory = new ApiFactory();
