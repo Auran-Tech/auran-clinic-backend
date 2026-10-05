@@ -281,6 +281,181 @@ public sealed class VisitService(
             await GetAsync(request.VisitId, cancellationToken));
     }
 
+    public async Task<VisitMutationResult> CompleteAsync(
+        CompleteVisitRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetActor(out var userId, out _))
+            return new VisitMutationResult(VisitMutationOutcome.Unauthenticated);
+
+        var visit = await dbContext.Visits
+            .SingleOrDefaultAsync(item => item.Id == request.VisitId, cancellationToken);
+        if (visit is null)
+            return new VisitMutationResult(VisitMutationOutcome.NotFound, Error: "Visit not found.");
+        if (visit.Status != VisitStatus.Open)
+            return new VisitMutationResult(VisitMutationOutcome.ValidationError, Error: "Only open visits can be completed.");
+
+        var hasActiveSession = await dbContext.VisitSessions
+            .AsNoTracking()
+            .AnyAsync(item => item.VisitId == request.VisitId && item.EndedAtUtc == null, cancellationToken);
+        if (hasActiveSession)
+            return new VisitMutationResult(VisitMutationOutcome.ValidationError, Error: "End the active doctor session before completing the visit.");
+
+        byte[] expectedVersion;
+        try
+        {
+            expectedVersion = Convert.FromBase64String(request.RowVersion);
+        }
+        catch (FormatException)
+        {
+            return new VisitMutationResult(VisitMutationOutcome.ValidationError, Error: "Invalid visit version.");
+        }
+
+        dbContext.Entry(visit).Property(item => item.RowVersion).OriginalValue = expectedVersion;
+
+        var queueEntry = await dbContext.QueueEntries
+            .SingleOrDefaultAsync(item => item.VisitId == request.VisitId && item.ExitAtUtc == null, cancellationToken);
+
+        WorkflowStatus? finalStatus = null;
+        if (queueEntry is not null)
+        {
+            finalStatus = await (
+                    from transition in dbContext.WorkflowTransitions.AsNoTracking()
+                    join status in dbContext.WorkflowStatuses.AsNoTracking()
+                        on transition.ToStatusId equals status.Id
+                    where transition.FromStatusId == queueEntry.WorkflowStatusId
+                          && status.IsSystemFinal
+                    orderby status.SortOrder
+                    select status)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (finalStatus is null)
+            {
+                return new VisitMutationResult(
+                    VisitMutationOutcome.ConfigurationRequired,
+                    Error: "Current queue status has no configured transition to a final status.");
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            visit.Status = VisitStatus.Completed;
+            visit.CompletedAtUtc = now;
+            visit.ExitAtUtc = now;
+            if (visit.DocumentationStatus != DocumentationStatus.Completed)
+                visit.DocumentationStatus = DocumentationStatus.Pending;
+            visit.UpdatedDate = now;
+            visit.UpdatedByUserId = userId;
+
+            if (queueEntry is not null && finalStatus is not null)
+            {
+                var fromStatusId = queueEntry.WorkflowStatusId;
+                queueEntry.WorkflowStatusId = finalStatus.Id;
+                queueEntry.ExitAtUtc = now;
+                queueEntry.UpdatedDate = now;
+                queueEntry.UpdatedByUserId = userId;
+
+                dbContext.QueueStatusHistory.Add(new QueueStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = queueEntry.ClinicId,
+                    QueueEntryId = queueEntry.Id,
+                    FromStatusId = fromStatusId,
+                    ToStatusId = finalStatus.Id,
+                    ChangedAtUtc = now,
+                    ChangedByUserId = userId,
+                    Notes = "Visit completed.",
+                    CreatedDate = now,
+                    CreateByUserId = userId
+                });
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await auditService.WriteAsync(
+                "Visit.Completed",
+                nameof(Visit),
+                visit.Id.ToString(),
+                new Dictionary<string, object?>
+                {
+                    ["documentationStatus"] = visit.DocumentationStatus.ToString(),
+                    ["queueClosed"] = queueEntry is not null
+                },
+                cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new VisitMutationResult(
+                VisitMutationOutcome.Conflict,
+                Error: "Visit or queue state changed by another user. Reload and try again.");
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+
+        return new VisitMutationResult(
+            VisitMutationOutcome.Success,
+            await GetAsync(request.VisitId, cancellationToken));
+    }
+
+    public async Task<VisitMutationResult> FinalizeDocumentationAsync(
+        FinalizeVisitDocumentationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetActor(out var userId, out _))
+            return new VisitMutationResult(VisitMutationOutcome.Unauthenticated);
+
+        var visit = await dbContext.Visits
+            .SingleOrDefaultAsync(item => item.Id == request.VisitId, cancellationToken);
+        if (visit is null)
+            return new VisitMutationResult(VisitMutationOutcome.NotFound, Error: "Visit not found.");
+
+        byte[] expectedVersion;
+        try
+        {
+            expectedVersion = Convert.FromBase64String(request.RowVersion);
+        }
+        catch (FormatException)
+        {
+            return new VisitMutationResult(VisitMutationOutcome.ValidationError, Error: "Invalid visit version.");
+        }
+
+        dbContext.Entry(visit).Property(item => item.RowVersion).OriginalValue = expectedVersion;
+
+        visit.DocumentationStatus = DocumentationStatus.Completed;
+        visit.UpdatedDate = DateTime.UtcNow;
+        visit.UpdatedByUserId = userId;
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new VisitMutationResult(
+                VisitMutationOutcome.Conflict,
+                Error: "Visit documentation changed by another user. Reload and try again.");
+        }
+
+        await auditService.WriteAsync(
+            "Visit.DocumentationFinalized",
+            nameof(Visit),
+            visit.Id.ToString(),
+            new Dictionary<string, object?> { ["documentationStatus"] = visit.DocumentationStatus.ToString() },
+            cancellationToken);
+
+        return new VisitMutationResult(
+            VisitMutationOutcome.Success,
+            await GetAsync(request.VisitId, cancellationToken));
+    }
+
     private bool TryGetActor(out Guid userId, out Guid clinicId)
     {
         if (currentUserContext.IsAuthenticated &&
