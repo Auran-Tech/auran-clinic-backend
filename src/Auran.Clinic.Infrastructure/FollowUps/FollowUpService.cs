@@ -33,16 +33,6 @@ public sealed class FollowUpService(
                         DoctorName = doctor.FullName
                     };
 
-        var normalizedSearch = Clean(search);
-        if (normalizedSearch is not null)
-        {
-            query = query.Where(item =>
-                item.PatientName.Contains(normalizedSearch) ||
-                item.PatientNumber.Contains(normalizedSearch) ||
-                item.DoctorName.Contains(normalizedSearch) ||
-                item.FollowUp.Recommendation.Contains(normalizedSearch));
-        }
-
         var rows = await query.ToListAsync(cancellationToken);
         var mapped = rows
             .Select(item => Map(
@@ -52,6 +42,18 @@ public sealed class FollowUpService(
                 item.DoctorName,
                 clinicDate))
             .ToList();
+
+        var normalizedSearch = Clean(search);
+        if (normalizedSearch is not null)
+        {
+            mapped = mapped
+                .Where(item =>
+                    item.PatientName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    item.PatientNumber.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    item.DoctorName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    item.Recommendation.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
 
         var normalizedCategory = Clean(dueCategory);
         if (normalizedCategory is not null && !normalizedCategory.Equals("All", StringComparison.OrdinalIgnoreCase))
