@@ -1,5 +1,6 @@
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Queue;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
@@ -48,11 +49,16 @@ public sealed class QueueService(
                 })
             .ToListAsync(cancellationToken);
 
-        var staff = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => user.IsActive)
-            .OrderBy(user => user.FullName)
-            .Select(user => new QueueStaffResponse(user.Id, user.FullName))
+        var staff = await (
+                from user in dbContext.Users.AsNoTracking()
+                join userRole in dbContext.UserRoles.AsNoTracking()
+                    on user.Id equals userRole.UserId
+                join role in dbContext.Roles.AsNoTracking()
+                    on userRole.RoleId equals role.Id
+                where user.IsActive && role.Code == SystemRoleCatalog.Doctor
+                orderby user.FullName
+                select new QueueStaffResponse(user.Id, user.FullName))
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         return new QueueBoardResponse(
