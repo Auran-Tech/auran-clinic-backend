@@ -12,6 +12,7 @@ namespace Auran.Clinic.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 [Produces("application/json")]
+[ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [AllowAnonymous]
