@@ -71,6 +71,27 @@ public sealed class AccountStateAuthFlowTests
     }
 
     [Fact]
+    public async Task CurrentUser_ReturnsCurrentDatabaseAccountState()
+    {
+        using var factory = new ApiFactory();
+        var fixture = await CreateAccountAsync(factory, userIsActive: true, clinicIsActive: true);
+        using var client = factory.CreateClient();
+        var session = await LoginAsync(client, fixture.Credentials);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/current");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var envelope = await response.Content.ReadFromJsonAsync<BaseResponse<CurrentUserResponse>>();
+
+        Assert.NotNull(envelope?.Data);
+        Assert.Equal(fixture.UserId, envelope.Data.UserId);
+        Assert.Equal(fixture.ClinicId, envelope.Data.ClinicId);
+        Assert.Equal(session.User.FullName, envelope.Data.FullName);
+    }
+
+    [Fact]
     public async Task ExistingAccessToken_AfterUserIsDisabled_IsRejected()
     {
         using var factory = new ApiFactory();
