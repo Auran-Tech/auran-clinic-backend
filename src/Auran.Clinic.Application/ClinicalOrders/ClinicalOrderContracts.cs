@@ -61,6 +61,13 @@ public sealed class SaveClinicalOrderRequestValidator : AbstractValidator<SaveCl
     public SaveClinicalOrderRequestValidator()
     {
         RuleFor(x => x.VisitId).NotEmpty();
+        RuleFor(x => x.Sections)
+            .Must(sections => sections
+                .Select(section => section.DefinitionCode.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() == sections.Count)
+            .WithMessage("Clinical order section definitions must be unique.");
+
         RuleForEach(x => x.Sections).ChildRules(section =>
         {
             section.RuleFor(x => x.DefinitionCode).NotEmpty().MaximumLength(64);
