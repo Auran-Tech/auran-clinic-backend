@@ -66,6 +66,13 @@ public sealed class ClinicalOrderService(
             .Distinct()
             .ToArray();
 
+        if (requestedDefinitionIds.Length != request.Sections.Count)
+        {
+            return new ClinicalOrderResult(
+                ClinicalOrderOutcome.InvalidSectionDefinition,
+                Error: "Duplicate clinical order sections are not allowed.");
+        }
+
         var definitions = requestedDefinitionIds.Length == 0
             ? new List<ClinicalOrderSectionDefinition>()
             : await dbContext.ClinicalOrderSectionDefinitions
