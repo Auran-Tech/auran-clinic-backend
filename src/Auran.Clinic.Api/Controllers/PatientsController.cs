@@ -41,7 +41,7 @@ public sealed class PatientsController(
         });
     }
 
-    [HttpGet("{patientId:guid}")]
+    [HttpGet("detail")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.View)]
     [SwaggerOperation(
         Summary = "Get a clinic patient",
@@ -49,7 +49,7 @@ public sealed class PatientsController(
         OperationId = "Patients_Get",
         Tags = new[] { "Patients" })]
     public async Task<ActionResult<BaseResponse<PatientResponse>>> Get(
-        Guid patientId,
+        [FromQuery] Guid patientId,
         CancellationToken cancellationToken)
     {
         var patient = await patientService.GetAsync(patientId, cancellationToken);
