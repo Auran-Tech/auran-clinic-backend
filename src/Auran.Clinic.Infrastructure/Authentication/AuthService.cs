@@ -114,6 +114,61 @@ public sealed class AuthService(
         return response;
     }
 
+    public async Task<CurrentUserResponse?> GetCurrentAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!currentUserContext.IsAuthenticated ||
+            currentUserContext.UserId is not Guid userId ||
+            currentUserContext.ClinicId is not Guid clinicId)
+        {
+            return null;
+        }
+
+        var user = await dbContext.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item =>
+                    item.Id == userId &&
+                    item.ClinicId == clinicId &&
+                    item.IsActive,
+                cancellationToken);
+
+        if (user is null)
+            return null;
+
+        var roleIds = await dbContext.UserRoles
+            .AsNoTracking()
+            .Where(item =>
+                item.ClinicId == clinicId &&
+                item.UserId == userId)
+            .Select(item => item.RoleId)
+            .ToListAsync(cancellationToken);
+
+        var roles = await dbContext.Roles
+            .AsNoTracking()
+            .Where(item => roleIds.Contains(item.Id))
+            .Select(item => item.Code)
+            .Distinct()
+            .OrderBy(code => code)
+            .ToListAsync(cancellationToken);
+
+        var permissions = await effectivePermissionService.GetAsync(
+            user.IsSuperUser,
+            roleIds,
+            cancellationToken);
+
+        return new CurrentUserResponse
+        {
+            UserId = user.Id,
+            ClinicId = user.ClinicId,
+            FullName = user.FullName,
+            Email = user.Email,
+            IsSuperUser = user.IsSuperUser,
+            Roles = roles,
+            Permissions = permissions
+        };
+    }
+
     public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         if (!currentUserContext.IsAuthenticated ||
