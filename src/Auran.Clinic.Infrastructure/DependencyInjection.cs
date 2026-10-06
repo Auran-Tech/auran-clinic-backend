@@ -173,6 +173,7 @@ public static class DependencyInjection
         services.AddScoped<IFollowUpService, FollowUpService>();
         services.AddScoped<IClinicSettingsService, ClinicSettingsService>();
         services.AddScoped<IWorkflowSettingsService, WorkflowSettingsService>();
+        services.AddScoped<IFieldSettingsService, FieldSettingsService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IClinicalOrderService, ClinicalOrderService>();
         services.AddScoped<IDashboardService, DashboardService>();
