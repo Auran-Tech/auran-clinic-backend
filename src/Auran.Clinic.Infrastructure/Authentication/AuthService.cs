@@ -39,7 +39,9 @@ public sealed class AuthService(
         if (!signInResult.Succeeded)
             return null;
 
-        var user = await dbContext.Users.AsNoTracking()
+        var user = await dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
             .SingleOrDefaultAsync(x => x.IdentityUserId == identityUser.Id, cancellationToken);
         if (user is null || !await CanAuthenticateAsync(user, cancellationToken))
             return null;
@@ -52,6 +54,7 @@ public sealed class AuthService(
         var tokenHash = HashToken(request.RefreshToken);
         var now = DateTime.UtcNow;
         var refreshToken = await dbContext.RefreshTokens
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(token =>
                 token.TokenHash == tokenHash &&
@@ -68,7 +71,9 @@ public sealed class AuthService(
         if (refreshToken is null)
             return null;
 
-        var user = await dbContext.Users.AsNoTracking()
+        var user = await dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
             .SingleOrDefaultAsync(
                 x => x.Id == refreshToken.UserId && x.ClinicId == refreshToken.ClinicId,
                 cancellationToken);
@@ -82,6 +87,7 @@ public sealed class AuthService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var revokedCount = await dbContext.RefreshTokens
+            .IgnoreQueryFilters()
             .Where(token =>
                 token.Id == refreshToken.Id &&
                 token.RevokedDate == null &&
@@ -104,6 +110,7 @@ public sealed class AuthService(
         var replacementTokenHash = HashToken(response.RefreshToken);
 
         await dbContext.RefreshTokens
+            .IgnoreQueryFilters()
             .Where(token => token.Id == refreshToken.Id)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(token => token.ReplacedByTokenHash, replacementTokenHash),
@@ -206,7 +213,9 @@ public sealed class AuthService(
         CancellationToken cancellationToken,
         bool saveChanges = true)
     {
-        var roleIds = await dbContext.UserRoles.AsNoTracking()
+        var roleIds = await dbContext.UserRoles
+            .IgnoreQueryFilters()
+            .AsNoTracking()
             .Where(x => x.ClinicId == user.ClinicId && x.UserId == user.Id)
             .Select(x => x.RoleId)
             .ToListAsync(cancellationToken);
