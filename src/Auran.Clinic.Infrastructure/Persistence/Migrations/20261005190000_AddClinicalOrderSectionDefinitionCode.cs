@@ -8,6 +8,10 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "IX_ClinicalOrderSectionDefinitions_ClinicId",
+                table: "ClinicalOrderSectionDefinitions");
+
             migrationBuilder.AddColumn<string>(
                 name: "Code",
                 table: "ClinicalOrderSectionDefinitions",
@@ -38,6 +42,11 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
             migrationBuilder.DropColumn(
                 name: "Code",
                 table: "ClinicalOrderSectionDefinitions");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClinicalOrderSectionDefinitions_ClinicId",
+                table: "ClinicalOrderSectionDefinitions",
+                column: "ClinicId");
         }
     }
 }
