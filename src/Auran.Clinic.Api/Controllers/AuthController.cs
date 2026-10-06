@@ -59,6 +59,25 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     }
 
     [Authorize(Policy = ActorPolicies.Clinic)]
+    [HttpGet("current")]
+    [SwaggerOperation(
+        Summary = "Get the current clinic user",
+        Description = "Returns the authenticated clinic user's current active account state, roles, and effective permissions from the database.",
+        OperationId = "Auth_CurrentUser",
+        Tags = new[] { "Authentication" })]
+    [ProducesResponseType(typeof(BaseResponse<CurrentUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<BaseResponse<CurrentUserResponse>>> Current(
+        CancellationToken cancellationToken)
+    {
+        var result = await authService.GetCurrentAsync(cancellationToken);
+        if (result is null)
+            return Unauthorized(new BaseResponse { Status = false, Message = "The current user is unavailable." });
+
+        return Ok(new BaseResponse<CurrentUserResponse> { Status = true, Data = result });
+    }
+
+    [Authorize(Policy = ActorPolicies.Clinic)]
     [HttpPost("logout")]
     [SwaggerOperation(
         Summary = "Log out and revoke a refresh token",
