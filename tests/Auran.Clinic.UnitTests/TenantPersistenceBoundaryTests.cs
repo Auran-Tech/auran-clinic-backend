@@ -96,21 +96,24 @@ public sealed class TenantPersistenceBoundaryTests
     }
 
     [Fact]
-    public async Task UnauthenticatedQuery_RemainsUnfilteredForAuthenticationAndBootstrapFlows()
+    public async Task UnauthenticatedQuery_FailsClosedWithoutExplicitClinicScope()
     {
         var databaseName = Guid.NewGuid().ToString();
         var clinicA = Guid.NewGuid();
         var clinicB = Guid.NewGuid();
 
-        await using var context = CreateContext(databaseName, TestCurrentUserContext.Unauthenticated());
-        context.Patients.AddRange(
-            CreatePatient(clinicA, "A"),
-            CreatePatient(clinicB, "B"));
-        await context.SaveChangesAsync();
+        await using (var seedContext = CreateContext(databaseName, TestCurrentUserContext.Unauthenticated()))
+        {
+            seedContext.Patients.AddRange(
+                CreatePatient(clinicA, "A"),
+                CreatePatient(clinicB, "B"));
+            await seedContext.SaveChangesAsync();
+        }
 
+        await using var context = CreateContext(databaseName, TestCurrentUserContext.Unauthenticated());
         var patients = await context.Patients.AsNoTracking().ToListAsync();
 
-        Assert.Equal(2, patients.Count);
+        Assert.Empty(patients);
     }
 
     [Fact]
