@@ -30,6 +30,34 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
     }
 
     [Fact]
+    public async Task ApiResponses_IncludeDefensiveSecurityHeaders()
+    {
+        using var client = CreateHttpsClient();
+        using var response = await client.GetAsync("/health/live");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+        Assert.Equal("camera=(), microphone=(), geolocation=()", response.Headers.GetValues("Permissions-Policy").Single());
+    }
+
+    [Fact]
+    public async Task AuthenticationResponses_AreNotCacheable()
+    {
+        using var client = CreateHttpsClient();
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                Email = "cache-test@example.invalid",
+                Password = "InvalidPassword123"
+            });
+
+        Assert.True(response.Headers.CacheControl?.NoStore);
+    }
+
+    [Fact]
     public async Task Login_ReturnsTooManyRequestsAfterFiveAttemptsFromSameClient()
     {
         using var client = CreateHttpsClient();
