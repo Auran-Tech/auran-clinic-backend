@@ -105,13 +105,11 @@ public class AuranClinicDbContext(
     private void ApplyClinicQueryFilter<TEntity>(ModelBuilder modelBuilder)
         where TEntity : ClinicEntity
     {
-        // Unauthenticated/system scopes may operate across tenants for startup and migration work.
-        // Authenticated actors are fail-closed. Platform services must explicitly enter a scoped
-        // ClinicScopeOverride before reading or writing clinic-owned data.
+        // Clinic-owned data is fail-closed for every context. Request actors use their authenticated
+        // clinic scope; trusted platform/system workflows must explicitly enter ClinicScopeOverride.
         modelBuilder.Entity<TEntity>()
             .HasQueryFilter(entity =>
-                !IsAuthenticatedRequest ||
-                (HasClinicScope && entity.ClinicId == CurrentClinicId));
+                HasClinicScope && entity.ClinicId == CurrentClinicId);
     }
 
     private void EnforceClinicWriteBoundary()

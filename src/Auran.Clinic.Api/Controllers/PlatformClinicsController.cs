@@ -15,7 +15,8 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class PlatformClinicsController(
     IPlatformClinicService clinicService,
     IValidator<UpdateClinicRequest> updateClinicValidator,
-    IValidator<SetClinicStatusRequest> setClinicStatusValidator) : ControllerBase
+    IValidator<SetClinicStatusRequest> setClinicStatusValidator,
+    IValidator<ClinicLookupRequest> clinicLookupValidator) : ControllerBase
 {
     [HttpPost]
     [SwaggerOperation(
@@ -45,9 +46,8 @@ public sealed class PlatformClinicsController(
             return result.IsConflict ? Conflict(response) : BadRequest(response);
         }
 
-        return CreatedAtAction(
-            nameof(GetById),
-            new { clinicId = result.Clinic!.Id },
+        return StatusCode(
+            StatusCodes.Status201Created,
             new BaseResponse<ClinicDetailsResponse>
             {
                 Status = true,
@@ -72,20 +72,21 @@ public sealed class PlatformClinicsController(
         });
     }
 
-    [HttpGet("details")]
+    [HttpPost("details")]
     [SwaggerOperation(
         Summary = "Get clinic",
-        Description = "Returns platform-operational clinic metadata and the initial administrator reference. The clinic identifier is supplied as a query parameter.",
+        Description = "Returns platform-operational clinic metadata and the initial administrator reference. The clinic identifier is supplied in the request body.",
         OperationId = "PlatformClinics_Get",
         Tags = new[] { "Platform Clinics" })]
     public async Task<ActionResult<BaseResponse<ClinicDetailsResponse>>> GetById(
-        [FromQuery] Guid clinicId,
+        [FromBody] ClinicLookupRequest request,
         CancellationToken cancellationToken)
     {
-        if (clinicId == Guid.Empty)
+        var validation = await clinicLookupValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
             return ValidationFailure();
 
-        var clinic = await clinicService.GetAsync(clinicId, cancellationToken);
+        var clinic = await clinicService.GetAsync(request.ClinicId, cancellationToken);
         if (clinic is null)
             return NotFound(new BaseResponse { Status = false, Message = "Clinic not found." });
 

@@ -9,13 +9,13 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
     public async Task Cors_AllowsConfiguredDevelopmentOrigin()
     {
         using var client = CreateHttpsClient();
-        using var request = CreatePreflightRequest("http://localhost:4200");
+        using var request = CreatePreflightRequest("http://localhost:5173");
 
         using var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
-        Assert.Contains("http://localhost:4200", origins);
+        Assert.Contains("http://localhost:5173", origins);
     }
 
     [Fact]
@@ -30,6 +30,35 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
     }
 
     [Fact]
+    public async Task ApiResponses_IncludeDefensiveSecurityHeaders()
+    {
+        using var client = CreateHttpsClient();
+        using var response = await client.GetAsync("/health/live");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+        Assert.Equal("camera=(), microphone=(), geolocation=()", response.Headers.GetValues("Permissions-Policy").Single());
+    }
+
+    [Fact]
+    public async Task AuthenticationResponses_AreNotCacheable()
+    {
+        using var client = CreateHttpsClient();
+        using var request = CreateLoginRequest(
+            new
+            {
+                Email = "cache-test@example.invalid",
+                Password = "InvalidPassword123"
+            },
+            "198.51.100.50");
+        using var response = await client.SendAsync(request);
+
+        Assert.True(response.Headers.CacheControl?.NoStore);
+    }
+
+    [Fact]
     public async Task Login_ReturnsTooManyRequestsAfterFiveAttemptsFromSameClient()
     {
         using var client = CreateHttpsClient();
@@ -41,11 +70,13 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
-            using var response = await client.PostAsJsonAsync("/api/auth/login", payload);
+            using var request = CreateLoginRequest(payload, "198.51.100.40");
+            using var response = await client.SendAsync(request);
             Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
         }
 
-        using var rejectedResponse = await client.PostAsJsonAsync("/api/auth/login", payload);
+        using var rejectedRequest = CreateLoginRequest(payload, "198.51.100.40");
+        using var rejectedResponse = await client.SendAsync(rejectedRequest);
         var body = await rejectedResponse.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.TooManyRequests, rejectedResponse.StatusCode);

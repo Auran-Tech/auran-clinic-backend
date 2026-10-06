@@ -4,6 +4,8 @@ public static class SystemPermissionCatalog
 {
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
+        new(Permissions.Dashboard.View, "Dashboard", "View clinic dashboard", "عرض لوحة العيادة"),
+
         new(Permissions.Audit.View, "Audit", "View audit logs", "عرض سجل التدقيق"),
 
         new(Permissions.Patients.View, "Patient", "View patient information", "عرض بيانات المرضى", "Patients.View"),

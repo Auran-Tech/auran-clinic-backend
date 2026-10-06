@@ -3,19 +3,37 @@ using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Authentication;
 using Auran.Clinic.Application.Authorization;
+using Auran.Clinic.Application.ClinicalOrders;
 using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Codes;
+using Auran.Clinic.Application.Dashboard;
 using Auran.Clinic.Application.Lookups;
+using Auran.Clinic.Application.Patients;
+using Auran.Clinic.Application.FollowUps;
+using Auran.Clinic.Application.Files;
+using Auran.Clinic.Application.Queue;
+using Auran.Clinic.Application.Reports;
+using Auran.Clinic.Application.Settings;
+using Auran.Clinic.Application.Visits;
 using Auran.Clinic.Application.Users;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Auditing;
 using Auran.Clinic.Infrastructure.Authentication;
 using Auran.Clinic.Infrastructure.Authorization;
+using Auran.Clinic.Infrastructure.ClinicalOrders;
 using Auran.Clinic.Infrastructure.Caching;
 using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Codes;
+using Auran.Clinic.Infrastructure.Dashboard;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Lookups;
+using Auran.Clinic.Infrastructure.Patients;
+using Auran.Clinic.Infrastructure.FollowUps;
+using Auran.Clinic.Infrastructure.Files;
+using Auran.Clinic.Infrastructure.Queue;
+using Auran.Clinic.Infrastructure.Reports;
+using Auran.Clinic.Infrastructure.Settings;
+using Auran.Clinic.Infrastructure.Visits;
 using Auran.Clinic.Infrastructure.Persistence;
 using Auran.Clinic.Infrastructure.Platform;
 using Auran.Clinic.Infrastructure.Users;
@@ -48,6 +66,9 @@ public static class DependencyInjection
 
         services.Configure<PlatformBootstrapOptions>(
             configuration.GetSection(PlatformBootstrapOptions.SectionName));
+
+        services.Configure<FileStorageOptions>(
+            configuration.GetSection(FileStorageOptions.SectionName));
 
         services.AddIdentityCore<ApplicationIdentityUser>(options =>
         {
@@ -141,7 +162,23 @@ public static class DependencyInjection
         services.AddSingleton<ISystemLookupService, SystemLookupService>();
         services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
+        services.AddScoped<IRoleCatalogService, RoleCatalogService>();
         services.AddScoped<IUserAccountService, UserAccountService>();
+        services.AddScoped<IPatientService, PatientService>();
+        services.AddScoped<IPatientClinicalProfileService, PatientClinicalProfileService>();
+        services.AddScoped<IPatientDynamicProfileService, PatientDynamicProfileService>();
+        services.AddScoped<IPatientMeasurementService, PatientMeasurementService>();
+        services.AddScoped<IQueueService, QueueService>();
+        services.AddScoped<IVisitService, VisitService>();
+        services.AddScoped<IFollowUpService, FollowUpService>();
+        services.AddScoped<IClinicSettingsService, ClinicSettingsService>();
+        services.AddScoped<IWorkflowSettingsService, WorkflowSettingsService>();
+        services.AddScoped<IFieldSettingsService, FieldSettingsService>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IClinicalOrderService, ClinicalOrderService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IFileStorage, LocalFileStorage>();
+        services.AddScoped<IFileAttachmentService, FileAttachmentService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();

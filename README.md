@@ -247,3 +247,10 @@ GitHub Actions runs for pull requests and `main` and performs:
 ---
 
 © Auran Technology
+
+
+## File storage
+
+MVP 1 uses the `IFileStorage` abstraction. The default provider is local private storage under `App_Data/uploads`; files are never exposed as static public URLs and downloads go through authenticated API endpoints. Production deployments can replace the local provider with object storage such as S3 without changing application or domain code.
+
+Default upload limit is 20 MB. Accepted MVP file types are PDF, JPEG, PNG, WebP, plain text and DOCX.

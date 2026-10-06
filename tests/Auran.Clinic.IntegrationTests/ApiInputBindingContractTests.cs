@@ -34,6 +34,21 @@ public sealed class ApiInputBindingContractTests
     }
 
     [Fact]
+    public void ControllerActions_DoNotExposeGuidIdentifiersInQueryStrings()
+    {
+        var violations = GetControllerActions()
+            .SelectMany(item => item.Action.GetParameters()
+                .Where(parameter => parameter.GetCustomAttribute<FromQueryAttribute>() is not null)
+                .Where(parameter => parameter.ParameterType == typeof(Guid) || parameter.ParameterType == typeof(Guid?))
+                .Select(parameter => $"{item.Controller.Name}.{item.Action.Name}: query parameter '{parameter.Name}' exposes an internal identifier."))
+            .ToArray();
+
+        Assert.True(
+            violations.Length == 0,
+            $"Internal GUID identifiers are not allowed in URLs. Move them to a request body. Violations: {string.Join(" | ", violations)}");
+    }
+
+    [Fact]
     public void ControllerActions_UseAtMostOneAllowedClientBindingSource()
     {
         var violations = new List<string>();

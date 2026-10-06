@@ -58,19 +58,22 @@ public sealed class AuditService(
             throw new InvalidOperationException("An authenticated clinic user is required to read audit events.");
 
         var boundedTake = Math.Clamp(take, 1, 200);
-        return await dbContext.AuditLogs
-            .AsNoTracking()
-            .OrderByDescending(log => log.OccurredAtUtc)
+        return await (
+                from log in dbContext.AuditLogs.AsNoTracking()
+                join actor in dbContext.Users.AsNoTracking()
+                    on log.ActorUserId equals actor.Id
+                orderby log.OccurredAtUtc descending
+                select new AuditLogResponse(
+                    log.Id,
+                    log.ActorUserId,
+                    actor.FullName,
+                    log.Action,
+                    log.EntityType,
+                    log.EntityId,
+                    log.OccurredAtUtc,
+                    log.MetadataJson,
+                    log.IpAddress))
             .Take(boundedTake)
-            .Select(log => new AuditLogResponse(
-                log.Id,
-                log.ActorUserId,
-                log.Action,
-                log.EntityType,
-                log.EntityId,
-                log.OccurredAtUtc,
-                log.MetadataJson,
-                log.IpAddress))
             .ToListAsync(cancellationToken);
     }
 }

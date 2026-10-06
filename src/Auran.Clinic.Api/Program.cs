@@ -136,6 +136,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+    app.UseHsts();
+
 app.UseForwardedHeaders();
 app.UseRequestLocalization();
 app.UseExceptionHandler();
@@ -167,6 +170,10 @@ app.UseStatusCodePages(async statusCodeContext =>
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
     await next();
 });
 app.UseSerilogRequestLogging(options =>
