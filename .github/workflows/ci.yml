@@ -43,6 +43,21 @@ jobs:
       - name: Build with warnings as errors
         run: dotnet build Auran.Clinic.sln --configuration Release --no-restore -warnaserror
 
+      - name: Diagnose pending EF model
+        shell: bash
+        run: |
+          rm -rf src/Auran.Clinic.Infrastructure/Persistence/CiDiagnostic
+          dotnet ef migrations add CiPendingModelDiagnostic \
+            --project src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj \
+            --startup-project src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
+            --configuration Release \
+            --no-build \
+            --output-dir Persistence/CiDiagnostic
+          echo "=== Generated diagnostic migration ==="
+          find src/Auran.Clinic.Infrastructure/Persistence/CiDiagnostic -maxdepth 1 -name '*CiPendingModelDiagnostic.cs' -print -exec cat {} \;
+          echo "=== Snapshot diff ==="
+          git diff -- src/Auran.Clinic.Infrastructure/Persistence/Migrations/AuranClinicDbContextModelSnapshot.cs || true
+
       - name: Apply migrations to SQL Server
         shell: bash
         run: |
