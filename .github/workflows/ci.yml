@@ -57,6 +57,8 @@ jobs:
           find src/Auran.Clinic.Infrastructure/Persistence/CiDiagnostic -maxdepth 1 -name '*CiPendingModelDiagnostic.cs' -print -exec cat {} \;
           echo "=== Snapshot diff ==="
           git diff -- src/Auran.Clinic.Infrastructure/Persistence/Migrations/AuranClinicDbContextModelSnapshot.cs || true
+          echo "Stopping after EF diagnostic."
+          exit 1
 
       - name: Apply migrations to SQL Server
         shell: bash
