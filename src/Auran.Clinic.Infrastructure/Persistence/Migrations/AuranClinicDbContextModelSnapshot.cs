@@ -581,8 +581,6 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClinicId");
-
                     b.HasIndex("ClinicId", "Code")
                         .IsUnique();
 
