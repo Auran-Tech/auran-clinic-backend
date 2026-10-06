@@ -46,13 +46,14 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
     public async Task AuthenticationResponses_AreNotCacheable()
     {
         using var client = CreateHttpsClient();
-        using var response = await client.PostAsJsonAsync(
-            "/api/auth/login",
+        using var request = CreateLoginRequest(
             new
             {
                 Email = "cache-test@example.invalid",
                 Password = "InvalidPassword123"
-            });
+            },
+            "198.51.100.50");
+        using var response = await client.SendAsync(request);
 
         Assert.True(response.Headers.CacheControl?.NoStore);
     }
@@ -69,11 +70,13 @@ public class TransportSecurityTests(ApiFactory factory) : IClassFixture<ApiFacto
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
-            using var response = await client.PostAsJsonAsync("/api/auth/login", payload);
+            using var request = CreateLoginRequest(payload, "198.51.100.40");
+            using var response = await client.SendAsync(request);
             Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
         }
 
-        using var rejectedResponse = await client.PostAsJsonAsync("/api/auth/login", payload);
+        using var rejectedRequest = CreateLoginRequest(payload, "198.51.100.40");
+        using var rejectedResponse = await client.SendAsync(rejectedRequest);
         var body = await rejectedResponse.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.TooManyRequests, rejectedResponse.StatusCode);
