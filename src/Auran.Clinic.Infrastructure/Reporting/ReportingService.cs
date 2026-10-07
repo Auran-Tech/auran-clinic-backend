@@ -214,6 +214,7 @@ public sealed class ReportingService(
         if (!text.Contains(',') && !text.Contains('"') && !text.Contains('\n') && !text.Contains('\r'))
             return text;
 
-        return $""{text.Replace(""", """")}"";
+        var escaped = text.Replace(""", """");
+        return """ + escaped + """;
     }
 }
