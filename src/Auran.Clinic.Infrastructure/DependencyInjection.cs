@@ -176,6 +176,7 @@ public static class DependencyInjection
         services.AddScoped<IClinicalSessionService, ClinicalSessionService>();
         services.AddScoped<IClinicalOrderService, ClinicalOrderService>();
         services.AddScoped<IClinicalMeasurementService, ClinicalMeasurementService>();
+        services.AddScoped<IClinicalFieldConfigurationService, ClinicalFieldConfigurationService>();
         services.Configure<FileStorageOptions>(
             configuration.GetSection(FileStorageOptions.SectionName));
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
