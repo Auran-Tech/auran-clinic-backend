@@ -18,7 +18,7 @@ public sealed record WorkflowConfigurationResponse(
     IReadOnlyList<WorkflowStatusResponse> Statuses,
     IReadOnlyList<WorkflowTransitionResponse> Transitions);
 
-public sealed class CreateWorkflowStatusRequest
+public class CreateWorkflowStatusRequest
 {
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
