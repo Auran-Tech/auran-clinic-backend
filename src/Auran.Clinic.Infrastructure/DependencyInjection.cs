@@ -179,6 +179,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientAttachmentService, PatientAttachmentService>();
         services.AddScoped<IPendingDocumentationService, PendingDocumentationService>();
         services.AddScoped<IPatientProfileService, PatientProfileService>();
+        services.AddScoped<IPatientProfileConfigurationService, PatientProfileConfigurationService>();
         services.AddScoped<IFollowUpService, FollowUpService>();
         services.AddScoped<IClinicSettingsService, ClinicSettingsService>();
         services.AddScoped<IReportingService, ReportingService>();
