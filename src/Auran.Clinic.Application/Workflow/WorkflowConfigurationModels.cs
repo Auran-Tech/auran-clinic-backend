@@ -27,9 +27,14 @@ public class CreateWorkflowStatusRequest
     public bool IsSystemFinal { get; init; }
 }
 
-public sealed class UpdateWorkflowStatusRequest : CreateWorkflowStatusRequest
+public sealed class UpdateWorkflowStatusRequest
 {
     public Guid StatusId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Color { get; init; } = "#64748b";
+    public int SortOrder { get; init; }
+    public bool IsSystemFinal { get; init; }
 }
 
 public sealed class DeleteWorkflowStatusRequest
