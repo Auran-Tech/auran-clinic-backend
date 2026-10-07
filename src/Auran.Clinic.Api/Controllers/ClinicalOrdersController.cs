@@ -115,7 +115,7 @@ public sealed class ClinicalOrdersController(
             ClinicalOrderOutcome.InvalidSectionDefinition => BadRequest(new BaseResponse
             {
                 Status = false,
-                Message = result.Error,
+                Message = result.Error ?? "Invalid clinical order section configuration.",
                 Error = "invalid_section_definition"
             }),
             ClinicalOrderOutcome.Unauthenticated => Unauthorized(new BaseResponse
