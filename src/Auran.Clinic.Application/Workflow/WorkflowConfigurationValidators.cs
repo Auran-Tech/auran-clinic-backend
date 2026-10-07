@@ -28,10 +28,22 @@ public sealed class CreateWorkflowStatusRequestValidator
 public sealed class UpdateWorkflowStatusRequestValidator
     : AbstractValidator<UpdateWorkflowStatusRequest>
 {
+    private static readonly Regex CodePattern = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
+
     public UpdateWorkflowStatusRequestValidator()
     {
-        Include(new CreateWorkflowStatusRequestValidator());
         RuleFor(x => x.StatusId).NotEmpty();
+        RuleFor(x => x.Code)
+            .NotEmpty()
+            .MaximumLength(32)
+            .Must(code => CodePattern.IsMatch(code))
+            .WithMessage("Code may contain only letters, digits, and underscore.");
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Color)
+            .NotEmpty()
+            .Matches("^#[0-9A-Fa-f]{6}$")
+            .WithMessage("Color must be a 6-digit hex value.");
+        RuleFor(x => x.SortOrder).GreaterThanOrEqualTo(0);
     }
 }
 
