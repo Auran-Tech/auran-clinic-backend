@@ -51,6 +51,7 @@ public enum ClinicalMeasurementOutcome
 {
     Success,
     VisitNotFound,
+    VisitClosed,
     Forbidden,
     InvalidField,
     InvalidValue,
