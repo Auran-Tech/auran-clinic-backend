@@ -211,10 +211,12 @@ public sealed class ReportingService(
     private static string Escape(string? value)
     {
         var text = value ?? string.Empty;
-        if (!text.Contains(',') && !text.Contains('"') && !text.Contains('\n') && !text.Contains('\r'))
+        var quote = ((char)34).ToString();
+
+        if (!text.Contains(',') && !text.Contains((char)34) && !text.Contains('\n') && !text.Contains('\r'))
             return text;
 
-        var escaped = text.Replace(""", """");
-        return """ + escaped + """;
+        var escaped = text.Replace(quote, quote + quote);
+        return quote + escaped + quote;
     }
 }
