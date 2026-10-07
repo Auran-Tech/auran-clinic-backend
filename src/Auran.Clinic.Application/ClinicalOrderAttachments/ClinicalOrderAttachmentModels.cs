@@ -52,6 +52,7 @@ public enum ClinicalOrderAttachmentOutcome
     VisitNotFound,
     VisitClosed,
     FileNotFound,
+    LinkNotFound,
     InvalidSection,
     Forbidden,
     Conflict,
