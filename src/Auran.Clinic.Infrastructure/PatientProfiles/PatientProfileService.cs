@@ -127,9 +127,19 @@ public sealed class PatientProfileService(
                 Error: "Duplicate patient profile field values are not allowed.");
         }
 
-        var editableFields = await dbContext.PatientProfileFields
-            .Where(field => field.IsEnabled && EditableFieldTypes.Contains(field.FieldType))
-            .ToListAsync(cancellationToken);
+        var enabledSectionIds = await dbContext.PatientProfileSections.AsNoTracking()
+            .Where(section => section.IsEnabled)
+            .Select(section => section.Id)
+            .ToArrayAsync(cancellationToken);
+
+        var editableFields = enabledSectionIds.Length == 0
+            ? new List<PatientProfileField>()
+            : await dbContext.PatientProfileFields
+                .Where(field =>
+                    field.IsEnabled &&
+                    enabledSectionIds.Contains(field.SectionId) &&
+                    EditableFieldTypes.Contains(field.FieldType))
+                .ToListAsync(cancellationToken);
 
         var editableFieldMap = editableFields.ToDictionary(field => field.Id);
         if (requestedFieldIds.Any(fieldId => !editableFieldMap.ContainsKey(fieldId)))
