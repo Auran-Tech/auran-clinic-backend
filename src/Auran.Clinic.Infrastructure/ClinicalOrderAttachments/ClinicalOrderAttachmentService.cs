@@ -60,7 +60,7 @@ public sealed class ClinicalOrderAttachmentService(
             links = await (
                 from link in dbContext.ClinicalOrderAttachments.AsNoTracking()
                 join section in dbContext.ClinicalOrderSections.AsNoTracking()
-                    on link.ClinicalOrderSectionId equals section.Id
+                    on link.ClinicalOrderSectionId equals (Guid?)section.Id
                 join definition in dbContext.ClinicalOrderSectionDefinitions.AsNoTracking()
                     on section.SectionDefinitionId equals definition.Id
                 join file in dbContext.Files.AsNoTracking() on link.FileId equals file.Id
