@@ -178,6 +178,7 @@ public static class DependencyInjection
         services.AddScoped<IClinicSettingsService, ClinicSettingsService>();
         services.AddScoped<IReportingService, ReportingService>();
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IAuditReadService, AuditReadService>();
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
         services.AddScoped<ICurrentUserContext, CurrentUser>();
         services.AddScoped<AccessTokenStateValidator>();
