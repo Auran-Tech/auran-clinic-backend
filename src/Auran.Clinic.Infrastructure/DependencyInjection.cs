@@ -8,6 +8,7 @@ using Auran.Clinic.Application.Clinics;
 using Auran.Clinic.Application.Codes;
 using Auran.Clinic.Application.ClinicalSessions;
 using Auran.Clinic.Application.ClinicalOrders;
+using Auran.Clinic.Application.ClinicalOrderAttachments;
 using Auran.Clinic.Application.ClinicalMeasurements;
 using Auran.Clinic.Application.Files;
 using Auran.Clinic.Application.FollowUps;
@@ -31,6 +32,7 @@ using Auran.Clinic.Infrastructure.Clinics;
 using Auran.Clinic.Infrastructure.Codes;
 using Auran.Clinic.Infrastructure.ClinicalSessions;
 using Auran.Clinic.Infrastructure.ClinicalOrders;
+using Auran.Clinic.Infrastructure.ClinicalOrderAttachments;
 using Auran.Clinic.Infrastructure.ClinicalMeasurements;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Files;
@@ -175,6 +177,7 @@ public static class DependencyInjection
         services.AddScoped<IQueueService, QueueService>();
         services.AddScoped<IClinicalSessionService, ClinicalSessionService>();
         services.AddScoped<IClinicalOrderService, ClinicalOrderService>();
+        services.AddScoped<IClinicalOrderAttachmentService, ClinicalOrderAttachmentService>();
         services.AddScoped<IClinicalMeasurementService, ClinicalMeasurementService>();
         services.AddScoped<IClinicalFieldConfigurationService, ClinicalFieldConfigurationService>();
         services.Configure<FileStorageOptions>(
