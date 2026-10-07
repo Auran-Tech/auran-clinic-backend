@@ -33,7 +33,7 @@ public sealed class LocalFileStorageService : IFileStorageService
         var extension = Path.GetExtension(Path.GetFileName(originalName));
         var storedName = $"{Guid.NewGuid():N}{extension}";
         var dateFolder = DateTime.UtcNow.ToString("yyyy/MM");
-        var relativeKey = Path.Combine(dateFolder, storedName).Replace('\', '/');
+        var relativeKey = Path.Combine(dateFolder, storedName).Replace(Path.DirectorySeparatorChar, '/');
         var absolutePath = ResolvePath(relativeKey);
 
         Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
