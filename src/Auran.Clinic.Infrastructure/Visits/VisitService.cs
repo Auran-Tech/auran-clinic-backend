@@ -139,6 +139,63 @@ public sealed class VisitService(
         return await query.SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<PatientVisitHistoryResponse?> ListForPatientAsync(
+        PatientVisitHistoryQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var patientExists = await dbContext.Patients.AsNoTracking()
+            .AnyAsync(patient => patient.Id == query.PatientId, cancellationToken);
+
+        if (!patientExists)
+            return null;
+
+        var baseQuery =
+            from visit in dbContext.Visits.AsNoTracking()
+            join doctor in dbContext.Users.AsNoTracking()
+                on visit.DoctorId equals doctor.Id
+            where visit.PatientId == query.PatientId
+            select new
+            {
+                Visit = visit,
+                DoctorName = doctor.FullName,
+                SessionCount = dbContext.VisitSessions.Count(
+                    session => session.VisitId == visit.Id)
+            };
+
+        var totalCount = await baseQuery.CountAsync(cancellationToken);
+
+        var items = await baseQuery
+            .OrderByDescending(item => item.Visit.EntryAtUtc)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(item => new PatientVisitHistoryItemResponse(
+                item.Visit.Id,
+                item.Visit.DoctorId,
+                item.DoctorName,
+                item.Visit.Status.ToString(),
+                item.Visit.DocumentationStatus.ToString(),
+                item.Visit.EntryAtUtc,
+                item.Visit.CompletedAtUtc,
+                item.Visit.ExitAtUtc,
+                item.Visit.ChiefComplaint,
+                item.Visit.Diagnosis,
+                item.SessionCount))
+            .ToListAsync(cancellationToken);
+
+        return new PatientVisitHistoryResponse(
+            query.PatientId,
+            new Application.Models.PaginatedResponse<PatientVisitHistoryItemResponse>
+            {
+                Data = items,
+                Setting = new Application.Models.PaginationInfo
+                {
+                    TotalCount = totalCount,
+                    RowCount = query.PageSize,
+                    CurrentPage = query.Page
+                }
+            });
+    }
+
     private bool TryGetCurrentActor(out Guid userId, out Guid clinicId)
     {
         if (currentUserContext.IsAuthenticated &&
