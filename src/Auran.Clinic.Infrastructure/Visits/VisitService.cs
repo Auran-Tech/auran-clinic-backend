@@ -1,5 +1,6 @@
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
+using Auran.Clinic.Application.Models;
 using Auran.Clinic.Application.Visits;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
@@ -184,10 +185,10 @@ public sealed class VisitService(
 
         return new PatientVisitHistoryResponse(
             query.PatientId,
-            new Application.Models.PaginatedResponse<PatientVisitHistoryItemResponse>
+            new PaginatedResponse<PatientVisitHistoryItemResponse>
             {
                 Data = items,
-                Setting = new Application.Models.PaginationInfo
+                Setting = new PaginationInfo
                 {
                     TotalCount = totalCount,
                     RowCount = query.PageSize,
