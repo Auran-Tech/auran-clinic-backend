@@ -170,7 +170,7 @@ public sealed class PatientMedicalHistoryController(
         };
     }
 
-    private BadRequestObjectResult ValidationFailure<T>() =>
+    private BadRequestObjectResult ValidationFailure<T>() where T : class =>
         BadRequest(new BaseResponse<T>
         {
             Status = false,
