@@ -27,6 +27,14 @@ public sealed class ApiSmokeTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task Patient_records_require_authentication()
+    {
+        var response = await _client.GetAsync("/api/patients");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Unknown_route_uses_standard_json_error_contract()
     {
         var response = await _client.GetAsync("/api/route-that-does-not-exist");
