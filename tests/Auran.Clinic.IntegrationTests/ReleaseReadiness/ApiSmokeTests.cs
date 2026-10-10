@@ -34,6 +34,16 @@ public sealed class ApiSmokeTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/api/visits/active?patientId=00000000-0000-0000-0000-000000000001")]
+    [InlineData("/api/visits/history?patientId=00000000-0000-0000-0000-000000000001")]
+    public async Task Visit_records_require_authentication(string route)
+    {
+        var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public async Task Unknown_route_uses_standard_json_error_contract()
     {
