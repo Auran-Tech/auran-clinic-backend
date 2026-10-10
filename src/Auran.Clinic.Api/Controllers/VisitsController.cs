@@ -14,7 +14,8 @@ namespace Auran.Clinic.Api.Controllers;
 [Produces("application/json")]
 public sealed class VisitsController(
     IVisitService visitService,
-    IValidator<StartVisitRequest> startValidator) : ControllerBase
+    IValidator<StartVisitRequest> startValidator,
+    IValidator<PatientVisitHistoryQuery> historyValidator) : ControllerBase
 {
     [HttpPost("start")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Start)]
@@ -115,4 +116,43 @@ public sealed class VisitsController(
             Data = visit
         });
     }
+
+    [HttpGet("history")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
+    [SwaggerOperation(
+        Summary = "List a patient's visit history",
+        Description = "Returns a paged newest-first summary of visits for a patient in the authenticated clinic.",
+        OperationId = "Visits_ListForPatient",
+        Tags = new[] { "Visits", "Patients" })]
+    public async Task<ActionResult<BaseResponse<PatientVisitHistoryResponse>>> History(
+        [FromQuery] PatientVisitHistoryQuery query,
+        CancellationToken cancellationToken)
+    {
+        var validation = await historyValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new BaseResponse<PatientVisitHistoryResponse>
+            {
+                Status = false,
+                Error = "validation_error"
+            });
+        }
+
+        var history = await visitService.ListForPatientAsync(query, cancellationToken);
+        if (history is null)
+        {
+            return NotFound(new BaseResponse
+            {
+                Status = false,
+                Message = "Patient not found."
+            });
+        }
+
+        return Ok(new BaseResponse<PatientVisitHistoryResponse>
+        {
+            Status = true,
+            Data = history
+        });
+    }
+
 }
