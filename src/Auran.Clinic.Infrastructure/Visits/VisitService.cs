@@ -76,6 +76,18 @@ public sealed class VisitService(
 
             dbContext.Visits.Add(visit);
             dbContext.QueueEntries.Add(queueEntry);
+            dbContext.QueueStatusHistory.Add(new QueueStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                QueueEntryId = queueEntry.Id,
+                FromStatusId = null,
+                ToStatusId = initialStatus.Id,
+                ChangedAtUtc = now,
+                ChangedByUserId = userId,
+                CreatedDate = now,
+                CreateByUserId = userId
+            });
             await dbContext.SaveChangesAsync(cancellationToken);
 
             await auditService.WriteAsync(
