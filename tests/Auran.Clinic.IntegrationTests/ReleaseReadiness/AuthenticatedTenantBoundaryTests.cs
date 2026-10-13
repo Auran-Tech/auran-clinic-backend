@@ -143,7 +143,7 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
         var crossTenantWrite = await client.PostAsJsonAsync(
             "/api/clinical-measurements",
-            new { visitId = visitB, values = Array.Empty<object>() });
+            new { visitId = visitB, values = new[] { new { fieldId = Guid.NewGuid(), textValue = "test" } } });
         Assert.Equal(HttpStatusCode.NotFound, crossTenantWrite.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
