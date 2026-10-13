@@ -34,8 +34,8 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         var identityId = Guid.NewGuid().ToString("N");
 
         db.Clinics.AddRange(
-            new Clinic { Id = clinicA, Name = "Tenant test A", Code = "T" + clinicA.ToString("N")[..12] },
-            new Clinic { Id = clinicB, Name = "Tenant test B", Code = "T" + clinicB.ToString("N")[..12] });
+            new Auran.Clinic.Domain.Entities.Clinic { Id = clinicA, Name = "Tenant test A", Code = "T" + clinicA.ToString("N")[..12] },
+            new Auran.Clinic.Domain.Entities.Clinic { Id = clinicB, Name = "Tenant test B", Code = "T" + clinicB.ToString("N")[..12] });
         db.Set<ApplicationIdentityUser>().Add(new ApplicationIdentityUser
         {
             Id = identityId,
