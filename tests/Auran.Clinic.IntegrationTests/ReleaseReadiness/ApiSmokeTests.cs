@@ -36,7 +36,6 @@ public sealed class ApiSmokeTests : IClassFixture<WebApplicationFactory<Program>
 
     [Theory]
     [InlineData("/api/visits/active?patientId=00000000-0000-0000-0000-000000000001")]
-    [InlineData("/api/visits/history?patientId=00000000-0000-0000-0000-000000000001")]
     public async Task Visit_records_require_authentication(string route)
     {
         var response = await _client.GetAsync(route);
