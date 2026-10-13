@@ -76,6 +76,15 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         db.Visits.AddRange(
             new Visit { Id = visitA, ClinicId = clinicA, PatientId = patientA, DoctorId = userId, EntryAtUtc = DateTime.UtcNow },
             new Visit { Id = visitB, ClinicId = clinicB, PatientId = patientB, DoctorId = doctorB, EntryAtUtc = DateTime.UtcNow });
+        var fileA = Guid.NewGuid();
+        var fileB = Guid.NewGuid();
+        var attachmentB = Guid.NewGuid();
+        db.Files.AddRange(
+            new FileRecord { Id = fileA, ClinicId = clinicA, OriginalName = "a.pdf", StoredName = "a.pdf", ContentType = "application/pdf", Size = 4, StorageProvider = "local", StorageKey = "fixture-a-" + fileA, UploadedAtUtc = DateTime.UtcNow, UploadedByUserId = userId },
+            new FileRecord { Id = fileB, ClinicId = clinicB, OriginalName = "b.pdf", StoredName = "b.pdf", ContentType = "application/pdf", Size = 4, StorageProvider = "local", StorageKey = "fixture-b-" + fileB, UploadedAtUtc = DateTime.UtcNow, UploadedByUserId = doctorB });
+        db.PatientAttachments.AddRange(
+            new PatientAttachment { Id = Guid.NewGuid(), ClinicId = clinicA, PatientId = patientA, FileId = fileA },
+            new PatientAttachment { Id = attachmentB, ClinicId = clinicB, PatientId = patientB, FileId = fileB });
         await db.SaveChangesAsync();
 
         using var client = _factory.CreateClient();
@@ -120,11 +129,35 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_View"));
+        var ownAttachments = await client.GetAsync($"/api/patient-attachments?patientId={patientA}");
+        Assert.Equal(HttpStatusCode.OK, ownAttachments.StatusCode);
+        Assert.Contains(fileA.ToString(), await ownAttachments.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         var foreignAttachments = await client.GetAsync($"/api/patient-attachments?patientId={patientB}");
         Assert.Equal(HttpStatusCode.OK, foreignAttachments.StatusCode);
         var attachmentJson = await foreignAttachments.Content.ReadAsStringAsync();
         Assert.Contains("\"data\":[]", attachmentJson, StringComparison.OrdinalIgnoreCase);
 
+        var foreignDownload = await client.GetAsync($"/api/patient-attachments/download?fileId={fileB}");
+        Assert.Equal(HttpStatusCode.NotFound, foreignDownload.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload"));
+        var foreignDelete = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
+        {
+            Content = JsonContent.Create(new { attachmentId = attachmentB })
+        });
+        Assert.Equal(HttpStatusCode.NotFound, foreignDelete.StatusCode);
+
+        using var filePayload = new MultipartFormDataContent();
+        filePayload.Add(new StringContent(patientB.ToString()), "PatientId");
+        filePayload.Add(new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46 }), "File", "test.pdf");
+        filePayload.First(part => part.Headers.ContentDisposition?.Name == "\"File\"").Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        var foreignUpload = await client.PostAsync("/api/patient-attachments", filePayload);
+        Assert.Equal(HttpStatusCode.NotFound, foreignUpload.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_View"));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
         var fileReadDenied = await client.GetAsync($"/api/patient-attachments?patientId={patientA}");
