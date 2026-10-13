@@ -150,9 +150,9 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
 
         using var filePayload = new MultipartFormDataContent();
         filePayload.Add(new StringContent(patientB.ToString()), "PatientId");
-        filePayload.Add(new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46 }), "File", "test.pdf");
-        filePayload.First(part => part.Headers.ContentDisposition?.Name == "\"File\"").Headers.ContentType =
-            new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        using var fileContent = new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46 });
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        filePayload.Add(fileContent, "File", "test.pdf");
         var foreignUpload = await client.PostAsync("/api/patient-attachments", filePayload);
         Assert.Equal(HttpStatusCode.NotFound, foreignUpload.StatusCode);
 
