@@ -78,3 +78,29 @@ jobs:
 
       - name: Publish API
         run: dotnet publish src/Auran.Clinic.Api/Auran.Clinic.Api.csproj --configuration Release --no-build --output ./artifacts/api
+
+      - name: Hosted API and SQL readiness smoke
+        shell: bash
+        env:
+          ASPNETCORE_URLS: http://127.0.0.1:5085
+          ASPNETCORE_ENVIRONMENT: Production
+        run: |
+          set -euo pipefail
+          dotnet ./artifacts/api/Auran.Clinic.Api.dll > /tmp/auran-clinic-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; cat /tmp/auran-clinic-api.log' EXIT
+          for attempt in {1..40}; do
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              echo "API exited before becoming ready"
+              exit 1
+            fi
+            if curl --fail --silent http://127.0.0.1:5085/health/ready > /dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:5085/health/live > /dev/null
+          curl --fail --silent http://127.0.0.1:5085/health/ready > /dev/null
+          code=$(curl --silent --output /tmp/unauthorized-patients.json --write-out '%{http_code}' \
+            http://127.0.0.1:5085/api/patients)
+          test "$code" = "401"
