@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using Auran.Clinic.Domain.Entities;
@@ -115,6 +116,26 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         {
             var deniedResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
             Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_View"));
+        var foreignAttachments = await client.GetAsync($"/api/patient-attachments?patientId={patientB}");
+        Assert.Equal(HttpStatusCode.OK, foreignAttachments.StatusCode);
+        var attachmentJson = await foreignAttachments.Content.ReadAsStringAsync();
+        Assert.Contains("\"data\":[]", attachmentJson, StringComparison.OrdinalIgnoreCase);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
+        var fileReadDenied = await client.GetAsync($"/api/patient-attachments?patientId={patientA}");
+        Assert.Equal(HttpStatusCode.Forbidden, fileReadDenied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
+        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
+        {
+            var deniedWrite = await client.PostAsJsonAsync($"/api/{endpoint}", new { visitId = visitB });
+            Assert.Equal(HttpStatusCode.Forbidden, deniedWrite.StatusCode);
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
