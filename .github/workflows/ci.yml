@@ -86,7 +86,7 @@ jobs:
           ASPNETCORE_ENVIRONMENT: Production
         run: |
           set -euo pipefail
-          dotnet ./artifacts/api/Auran.Clinic.Api.dll > /tmp/auran-clinic-api.log 2>&1 &
+          (cd ./artifacts/api && dotnet Auran.Clinic.Api.dll) > /tmp/auran-clinic-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true; cat /tmp/auran-clinic-api.log' EXIT
           for attempt in {1..40}; do
