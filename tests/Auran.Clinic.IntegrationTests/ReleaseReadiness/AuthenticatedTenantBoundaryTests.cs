@@ -147,6 +147,13 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(HttpStatusCode.NotFound, crossTenantWrite.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+        var crossTenantOrderAttachmentWrite = await client.PostAsJsonAsync(
+            "/api/clinical-order-attachments",
+            new { visitId = visitB, fileId = Guid.NewGuid(), sectionDefinitionId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.NotFound, crossTenantOrderAttachmentWrite.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
