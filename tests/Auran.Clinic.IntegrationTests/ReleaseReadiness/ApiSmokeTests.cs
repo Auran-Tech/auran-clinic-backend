@@ -36,9 +36,32 @@ public sealed class ApiSmokeTests : IClassFixture<WebApplicationFactory<Program>
 
     [Theory]
     [InlineData("/api/visits/active?patientId=00000000-0000-0000-0000-000000000001")]
+    [InlineData("/api/visits/history?patientId=00000000-0000-0000-0000-000000000001")]
     public async Task Visit_records_require_authentication(string route)
     {
         var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/patient-medical-history?patientId=00000000-0000-0000-0000-000000000001")]
+    [InlineData("/api/clinical-measurements/fields")]
+    [InlineData("/api/clinical-measurements?visitId=00000000-0000-0000-0000-000000000001")]
+    [InlineData("/api/clinical-order-attachments?visitId=00000000-0000-0000-0000-000000000001")]
+    public async Task Clinical_records_require_authentication(string route)
+    {
+        var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/clinical-measurements")]
+    [InlineData("/api/clinical-order-attachments")]
+    public async Task Clinical_record_writes_require_authentication_before_validation(string route)
+    {
+        var response = await _client.PostAsJsonAsync(route, new { });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
