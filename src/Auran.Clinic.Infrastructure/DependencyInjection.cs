@@ -170,6 +170,7 @@ public static class DependencyInjection
         services.AddScoped<IUserAccountService, UserAccountService>();
         services.AddScoped<IPatientService, PatientService>();
         services.AddScoped<IPatientProfileService, PatientProfileService>();
+        services.AddScoped<IPatientProfileConfigurationService, PatientProfileConfigurationService>();
         services.AddScoped<IVisitService, VisitService>();
         services.AddScoped<IQueueService, QueueService>();
         services.AddScoped<IClinicalSessionService, ClinicalSessionService>();
