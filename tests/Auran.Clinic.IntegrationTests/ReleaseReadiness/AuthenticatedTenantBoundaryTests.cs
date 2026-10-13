@@ -59,11 +59,22 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         db.Patients.AddRange(
             new Patient { Id = patientA, ClinicId = clinicA, PatientNumber = "A" + patientA.ToString("N")[..12], FullName = "A", Phone = patientA.ToString("N") },
             new Patient { Id = patientB, ClinicId = clinicB, PatientNumber = "B" + patientB.ToString("N")[..12], FullName = "B", Phone = patientB.ToString("N") });
+        var doctorB = Guid.NewGuid();
+        var identityB = Guid.NewGuid().ToString("N");
+        db.Set<ApplicationIdentityUser>().Add(new ApplicationIdentityUser
+        {
+            Id = identityB, UserName = "test-" + identityB,
+            NormalizedUserName = "TEST-" + identityB.ToUpperInvariant(),
+            Email = identityB + "@example.invalid",
+            NormalizedEmail = identityB.ToUpperInvariant() + "@EXAMPLE.INVALID",
+            SecurityStamp = Guid.NewGuid().ToString()
+        });
+        db.Users.Add(new User { Id = doctorB, ClinicId = clinicB, IdentityUserId = identityB, FullName = "Clinic B doctor", IsActive = true });
         var visitA = Guid.NewGuid();
         var visitB = Guid.NewGuid();
         db.Visits.AddRange(
             new Visit { Id = visitA, ClinicId = clinicA, PatientId = patientA, DoctorId = userId, EntryAtUtc = DateTime.UtcNow },
-            new Visit { Id = visitB, ClinicId = clinicB, PatientId = patientB, DoctorId = userId, EntryAtUtc = DateTime.UtcNow });
+            new Visit { Id = visitB, ClinicId = clinicB, PatientId = patientB, DoctorId = doctorB, EntryAtUtc = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
         using var client = _factory.CreateClient();
