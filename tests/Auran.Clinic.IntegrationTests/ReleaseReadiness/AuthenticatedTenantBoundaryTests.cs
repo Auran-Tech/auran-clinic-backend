@@ -138,6 +138,14 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             Assert.Equal(HttpStatusCode.Forbidden, deniedWrite.StatusCode);
         }
 
+        // A valid editing permission must never override the clinic boundary.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+        var crossTenantWrite = await client.PostAsJsonAsync(
+            "/api/clinical-measurements",
+            new { visitId = visitB, values = Array.Empty<object>() });
+        Assert.Equal(HttpStatusCode.NotFound, crossTenantWrite.StatusCode);
+
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
