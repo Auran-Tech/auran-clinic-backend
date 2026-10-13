@@ -9,4 +9,7 @@ public interface IVisitService
     Task<VisitResponse?> GetActiveForPatientAsync(
         Guid patientId,
         CancellationToken cancellationToken = default);
+    Task<PatientVisitHistoryResponse?> ListForPatientAsync(
+        PatientVisitHistoryQuery query,
+        CancellationToken cancellationToken = default);
 }
