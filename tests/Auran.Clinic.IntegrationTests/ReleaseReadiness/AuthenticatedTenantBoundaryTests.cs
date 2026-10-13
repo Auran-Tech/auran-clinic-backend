@@ -89,6 +89,24 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(HttpStatusCode.Forbidden, medicalHistoryDenied.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
+        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
+        {
+            var ownResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
+            var foreignResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitB}");
+            Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, foreignResponse.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
+        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
+        {
+            var deniedResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
