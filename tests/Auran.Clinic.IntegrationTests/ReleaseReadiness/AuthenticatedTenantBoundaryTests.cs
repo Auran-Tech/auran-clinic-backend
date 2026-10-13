@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -185,6 +186,31 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             "/api/clinical-order-attachments",
             new { visitId = visitB, fileId = Guid.NewGuid(), sectionDefinitionId = Guid.NewGuid() });
         Assert.Equal(HttpStatusCode.NotFound, crossTenantOrderAttachmentWrite.StatusCode);
+
+        // Exercise real local storage and database lifecycle for an authorized patient.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload", "Files_View"));
+        using var ownPayload = new MultipartFormDataContent();
+        ownPayload.Add(new StringContent(patientA.ToString()), "PatientId");
+        using var ownFile = new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 });
+        ownFile.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        ownPayload.Add(ownFile, "File", "lifecycle.pdf");
+        using var uploaded = await client.PostAsync("/api/patient-attachments", ownPayload);
+        Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
+        using var result = JsonDocument.Parse(await uploaded.Content.ReadAsStringAsync());
+        var fileId = result.RootElement.GetProperty("data").GetProperty("fileId").GetGuid();
+        var attachmentId = result.RootElement.GetProperty("data").GetProperty("id").GetGuid();
+        using var downloaded = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
+        Assert.Equal(HttpStatusCode.OK, downloaded.StatusCode);
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 }, await downloaded.Content.ReadAsByteArrayAsync());
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
+        {
+            Content = JsonContent.Create(new { attachmentId })
+        };
+        using var deleted = await client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+        using var gone = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
+        Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
