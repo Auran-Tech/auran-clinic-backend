@@ -199,7 +199,7 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
         using var result = JsonDocument.Parse(await uploaded.Content.ReadAsStringAsync());
         var fileId = result.RootElement.GetProperty("data").GetProperty("fileId").GetGuid();
-        var attachmentId = result.RootElement.GetProperty("data").GetProperty("id").GetGuid();
+        var attachmentId = result.RootElement.GetProperty("data").GetProperty("attachmentId").GetGuid();
         using var downloaded = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
         Assert.Equal(HttpStatusCode.OK, downloaded.StatusCode);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 }, await downloaded.Content.ReadAsByteArrayAsync());
