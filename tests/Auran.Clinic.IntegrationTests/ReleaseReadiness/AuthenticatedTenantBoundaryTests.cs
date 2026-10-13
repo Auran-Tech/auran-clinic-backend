@@ -72,6 +72,18 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
+        var ownMedicalHistory = await client.GetAsync($"/api/patient-medical-history?patientId={patientA}");
+        var otherMedicalHistory = await client.GetAsync($"/api/patient-medical-history?patientId={patientB}");
+        Assert.Equal(HttpStatusCode.OK, ownMedicalHistory.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, otherMedicalHistory.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
+        var medicalHistoryDenied = await client.GetAsync($"/api/patient-medical-history?patientId={patientA}");
+        Assert.Equal(HttpStatusCode.Forbidden, medicalHistoryDenied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
