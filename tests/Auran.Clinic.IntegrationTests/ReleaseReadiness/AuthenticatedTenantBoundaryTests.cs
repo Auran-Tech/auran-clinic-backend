@@ -59,6 +59,22 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         db.Patients.AddRange(
             new Patient { Id = patientA, ClinicId = clinicA, PatientNumber = "A" + patientA.ToString("N")[..12], FullName = "A", Phone = patientA.ToString("N") },
             new Patient { Id = patientB, ClinicId = clinicB, PatientNumber = "B" + patientB.ToString("N")[..12], FullName = "B", Phone = patientB.ToString("N") });
+        var doctorB = Guid.NewGuid();
+        var identityB = Guid.NewGuid().ToString("N");
+        db.Set<ApplicationIdentityUser>().Add(new ApplicationIdentityUser
+        {
+            Id = identityB, UserName = "test-" + identityB,
+            NormalizedUserName = "TEST-" + identityB.ToUpperInvariant(),
+            Email = identityB + "@example.invalid",
+            NormalizedEmail = identityB.ToUpperInvariant() + "@EXAMPLE.INVALID",
+            SecurityStamp = Guid.NewGuid().ToString()
+        });
+        db.Users.Add(new User { Id = doctorB, ClinicId = clinicB, IdentityUserId = identityB, FullName = "Clinic B doctor", IsActive = true });
+        var visitA = Guid.NewGuid();
+        var visitB = Guid.NewGuid();
+        db.Visits.AddRange(
+            new Visit { Id = visitA, ClinicId = clinicA, PatientId = patientA, DoctorId = userId, EntryAtUtc = DateTime.UtcNow },
+            new Visit { Id = visitB, ClinicId = clinicB, PatientId = patientB, DoctorId = doctorB, EntryAtUtc = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
         using var client = _factory.CreateClient();
@@ -82,6 +98,24 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
         var medicalHistoryDenied = await client.GetAsync($"/api/patient-medical-history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, medicalHistoryDenied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
+        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
+        {
+            var ownResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
+            var foreignResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitB}");
+            Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, foreignResponse.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
+        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
+        {
+            var deniedResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
+        }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
