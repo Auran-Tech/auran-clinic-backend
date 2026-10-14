@@ -64,6 +64,35 @@ var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? [];
 
+if (builder.Environment.IsProduction())
+{
+    // A relative upload path defaults to the deployment directory and can be
+    // destroyed during container/image rotation, losing protected patient files.
+    var configuredRoot = builder.Configuration["FileStorage:RootPath"];
+    if (string.IsNullOrWhiteSpace(configuredRoot) ||
+        !Path.IsPathFullyQualified(configuredRoot))
+        throw new InvalidOperationException(
+            "Production requires an absolute FileStorage:RootPath on protected persistent storage.");
+
+    var fullRoot = Path.GetFullPath(configuredRoot);
+    var publicRoot = Path.GetFullPath(
+        Path.Combine(builder.Environment.ContentRootPath, "wwwroot"));
+    if (fullRoot.Equals(publicRoot, StringComparison.OrdinalIgnoreCase) ||
+        fullRoot.StartsWith(publicRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException(
+            "FileStorage:RootPath cannot be under the public web root.");
+
+    if (builder.Configuration.GetValue<bool>("PlatformBootstrap:Enabled"))
+        throw new InvalidOperationException(
+            "PlatformBootstrap:Enabled must be false in Production.");
+
+    if (allowedOrigins.Length == 0 ||
+        allowedOrigins.Any(origin => !Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps))
+        throw new InvalidOperationException(
+            "Production requires explicit HTTPS Cors:AllowedOrigins.");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(ApiSecurityPolicies.FrontendCors, policy =>
