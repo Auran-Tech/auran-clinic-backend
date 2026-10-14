@@ -14,10 +14,6 @@ public interface IClinicalSessionService
         SaveClinicalDocumentationRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<ClinicalSessionResult> CompleteDocumentationAsync(
-        CompleteClinicalDocumentationRequest request,
-        CancellationToken cancellationToken = default);
-
     Task<ClinicalSessionResult> EndAsync(
         EndClinicalSessionRequest request,
         CancellationToken cancellationToken = default);
