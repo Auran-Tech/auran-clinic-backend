@@ -19,6 +19,22 @@ public sealed class PatientVisitHistoryValidatorTests
     }
 
     [Fact]
+    public void Query_rejects_page_offset_that_would_overflow_int()
+    {
+        var validator = new PatientVisitHistoryQueryValidator();
+
+        var result = validator.Validate(new PatientVisitHistoryQuery
+        {
+            PatientId = Guid.NewGuid(),
+            Page = int.MaxValue,
+            PageSize = 50
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("pagination range"));
+    }
+
+    [Fact]
     public void Query_accepts_valid_page()
     {
         var validator = new PatientVisitHistoryQueryValidator();
