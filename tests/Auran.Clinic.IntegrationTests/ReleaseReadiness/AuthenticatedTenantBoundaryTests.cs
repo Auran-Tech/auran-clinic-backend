@@ -372,25 +372,25 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
         using (var forbiddenPolicy = await client.PutAsJsonAsync(
-            "/api/documentation-policies/GENERAL",
-            new { requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
+            "/api/documentation-policies",
+            new { specialtyCode = "GENERAL", requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
             Assert.Equal(HttpStatusCode.Forbidden, forbiddenPolicy.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Settings_Manage"));
         using (var savedPolicy = await client.PutAsJsonAsync(
-            "/api/documentation-policies/GENERAL",
-            new { requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
+            "/api/documentation-policies",
+            new { specialtyCode = "GENERAL", requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
             Assert.Equal(HttpStatusCode.OK, savedPolicy.StatusCode);
 
         using (var foreignAssignment = await client.PutAsJsonAsync(
-            $"/api/documentation-policies/doctors/{doctorB}",
-            new { specialtyCode = "GENERAL" }))
+            "/api/documentation-policies/doctors",
+            new { doctorId = doctorB, specialtyCode = "GENERAL" }))
             Assert.Equal(HttpStatusCode.NotFound, foreignAssignment.StatusCode);
 
         using (var assigned = await client.PutAsJsonAsync(
-            $"/api/documentation-policies/doctors/{userId}",
-            new { specialtyCode = "GENERAL" }))
+            "/api/documentation-policies/doctors",
+            new { doctorId = userId, specialtyCode = "GENERAL" }))
             Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
 
         var policyVisit = await db.Visits.SingleAsync(v => v.Id == visitA);
