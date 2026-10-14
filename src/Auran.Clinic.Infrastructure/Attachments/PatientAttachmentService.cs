@@ -206,6 +206,9 @@ public sealed class PatientAttachmentService(
         var file = await dbContext.Files
             .SingleOrDefaultAsync(item => item.Id == attachment.FileId, cancellationToken);
 
+        // Keep the attachment, file metadata, and audit event in one SQL transaction.
+        // The physical blob is only removed after the committed DB state makes it inaccessible.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         dbContext.PatientAttachments.Remove(attachment);
 
         var isReferencedByClinicalOrder = await dbContext.ClinicalOrderAttachments.AsNoTracking()
@@ -215,9 +218,6 @@ public sealed class PatientAttachmentService(
             dbContext.Files.Remove(file);
 
         await dbContext.SaveChangesAsync(cancellationToken);
-
-        if (file is not null && !isReferencedByClinicalOrder)
-            await fileStorage.DeleteAsync(file.StorageKey, cancellationToken);
 
         await auditService.WriteAsync(
             "PatientAttachment.Deleted",
@@ -229,6 +229,12 @@ public sealed class PatientAttachmentService(
                 ["fileId"] = attachment.FileId
             },
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        // Storage is not enlisted in the database transaction. Delete bytes only
+        // after the metadata/audit commit to avoid dangling database references.
+        if (file is not null && !isReferencedByClinicalOrder)
+            await fileStorage.DeleteAsync(file.StorageKey, cancellationToken);
 
         return true;
     }

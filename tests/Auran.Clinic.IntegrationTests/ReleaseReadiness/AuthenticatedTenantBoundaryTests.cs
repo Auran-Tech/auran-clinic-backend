@@ -11,6 +11,7 @@ using Auran.Clinic.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Auran.Clinic.IntegrationTests.ReleaseReadiness;
@@ -239,6 +240,12 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         };
         using var deleted = await client.SendAsync(deleteRequest);
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+        Assert.Equal(1, await db.AuditLogs.AsNoTracking()
+            .CountAsync(audit => audit.ClinicId == clinicA &&
+                audit.Action == "PatientAttachment.Deleted" &&
+                audit.EntityId == attachmentId.ToString()));
+        Assert.False(await db.Files.AsNoTracking()
+            .AnyAsync(file => file.Id == fileId));
         using var gone = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
 
