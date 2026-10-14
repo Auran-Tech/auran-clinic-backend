@@ -224,6 +224,20 @@ public sealed class PatientAttachmentService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // Insert the deletion instruction in the same SQL transaction as the
+        // metadata removal and audit. A crashed API cannot lose the cleanup job.
+        if (file is not null)
+        {
+            var deletionId = Guid.NewGuid();
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO dbo.FileDeletionOutbox
+                    (Id, ClinicId, StorageProvider, StorageKey, NotBeforeUtc)
+                VALUES ({deletionId}, {attachment.ClinicId}, {file.StorageProvider},
+                        {file.StorageKey}, SYSUTCDATETIME())
+                """, cancellationToken);
+        }
+
         await auditService.WriteAsync(
             "PatientAttachment.Deleted",
             nameof(PatientAttachment),
@@ -236,10 +250,8 @@ public sealed class PatientAttachmentService(
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        // Storage is not enlisted in the database transaction. Delete bytes only
-        // after the metadata/audit commit to avoid dangling database references.
-        if (file is not null)
-            await fileStorage.DeleteAsync(file.StorageKey, cancellationToken);
+        // Physical cleanup is asynchronous and durable. Do not turn a committed
+        // deletion into HTTP 500 because the local disk is temporarily unavailable.
 
         return PatientAttachmentDeleteOutcome.Deleted;
     }

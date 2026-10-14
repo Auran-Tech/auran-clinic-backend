@@ -192,6 +192,9 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorageService>(provider =>
             provider.GetRequiredService<LocalFileStorageService>());
         services.AddHostedService<LocalOrphanFileReconciliationService>();
+        services.Configure<FileDeletionOutboxOptions>(
+            configuration.GetSection(FileDeletionOutboxOptions.SectionName));
+        services.AddHostedService<FileDeletionOutboxWorker>();
         services.AddScoped<IPatientAttachmentService, PatientAttachmentService>();
         services.AddScoped<IPendingDocumentationService, PendingDocumentationService>();
         services.AddScoped<IFollowUpService, FollowUpService>();

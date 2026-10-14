@@ -12,6 +12,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
+using Auran.Clinic.Infrastructure.Files;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Auran.Clinic.IntegrationTests.ReleaseReadiness;
@@ -331,6 +335,11 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.True(downloaded.Headers.TryGetValues("X-Content-Type-Options", out var sniffOptions));
         Assert.Contains("nosniff", sniffOptions);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 }, await downloaded.Content.ReadAsByteArrayAsync());
+        var deletionStorageKey = await db.Files.AsNoTracking()
+            .Where(file => file.Id == fileId)
+            .Select(file => file.StorageKey)
+            .SingleAsync();
+
         using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
         {
             Content = JsonContent.Create(new { attachmentId })
@@ -343,6 +352,18 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
                 audit.EntityId == attachmentId.ToString()));
         Assert.False(await db.Files.AsNoTracking()
             .AnyAsync(file => file.Id == fileId));
+        // The outbox survives the HTTP transaction, even if local cleanup fails.
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox WHERE StorageKey = @key",
+            new SqlParameter("@key", deletionStorageKey)).SingleAsync());
+        var cleanupWorker = new FileDeletionOutboxWorker(
+            _factory.Services.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new FileDeletionOutboxOptions()),
+            NullLogger<FileDeletionOutboxWorker>.Instance);
+        await cleanupWorker.ProcessBatchAsync();
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox WHERE StorageKey = @key AND CompletedAtUtc IS NOT NULL",
+            new SqlParameter("@key", deletionStorageKey)).SingleAsync());
         using var gone = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
 
