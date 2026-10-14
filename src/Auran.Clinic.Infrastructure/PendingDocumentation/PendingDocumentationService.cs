@@ -28,10 +28,6 @@ public sealed class PendingDocumentationService(
                 return Array.Empty<PendingDocumentationResponse>();
             visits = visits.Where(visit => visit.DoctorId == userId);
         }
-        else if (query.MineOnly && currentUserContext.UserId is Guid superUserId)
-        {
-            visits = visits.Where(visit => visit.DoctorId == superUserId);
-        }
 
         return await (
             from visit in visits
