@@ -392,7 +392,6 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             ("Visit_View", HttpMethod.Put, "/api/clinical-sessions/documentation"),
             ("Queue_View", HttpMethod.Put, "/api/queue/move"),
             ("FollowUp_View", HttpMethod.Put, "/api/follow-ups/complete"),
-            ("Files_View", HttpMethod.Post, "/api/patient-attachments"),
             ("Files_View", HttpMethod.Delete, "/api/patient-attachments")
         };
         foreach (var (permission, method, path) in mutationDenials)
@@ -405,6 +404,21 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             };
             using var response = await client.SendAsync(deniedMutation);
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+
+        // Endpoint consumes multipart/form-data; a JSON request is rejected by
+        // content negotiation (415) before it can establish an auth contract.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_View"));
+        using (var multipartWithoutPermission = new MultipartFormDataContent())
+        {
+            multipartWithoutPermission.Add(new StringContent(patientA.ToString()), "PatientId");
+            using var filePart = new ByteArrayContent("%PDF-1"u8.ToArray());
+            filePart.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            multipartWithoutPermission.Add(filePart, "File", "restricted.pdf");
+            using var uploadDenied = await client.PostAsync(
+                "/api/patient-attachments", multipartWithoutPermission);
+            Assert.Equal(HttpStatusCode.Forbidden, uploadDenied.StatusCode);
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
