@@ -75,9 +75,37 @@ public sealed class PatientAttachmentService(
         if (!patientExists)
             return new PatientAttachmentResult(PatientAttachmentOutcome.PatientNotFound);
 
+        // A multipart Content-Type and stated length are not evidence of file content.
+        // Bound the actual bytes read, then check the signature before storing anything.
+        using var validatedContent = new MemoryStream();
+        var buffer = new byte[81920];
+        long actualSize = 0;
+        while (true)
+        {
+            var read = await content.ReadAsync(buffer, cancellationToken);
+            if (read == 0) break;
+            actualSize += read;
+            if (actualSize > MaxFileSize)
+            {
+                return new PatientAttachmentResult(
+                    PatientAttachmentOutcome.ValidationError,
+                    Error: "Attachment exceeds the 10 MB upload limit.");
+            }
+
+            await validatedContent.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+
+        if (actualSize != size || !HasValidFileSignature(validatedContent, contentType))
+        {
+            return new PatientAttachmentResult(
+                PatientAttachmentOutcome.ValidationError,
+                Error: "Attachment content does not match its declared size or file type.");
+        }
+
+        validatedContent.Position = 0;
         var safeOriginalName = Path.GetFileName(originalName.Trim());
         var stored = await fileStorage.SaveAsync(
-            content,
+            validatedContent,
             safeOriginalName,
             contentType,
             cancellationToken);
@@ -203,6 +231,22 @@ public sealed class PatientAttachmentService(
             cancellationToken);
 
         return true;
+    }
+
+    private static bool HasValidFileSignature(MemoryStream content, string contentType)
+    {
+        var header = content.GetBuffer().AsSpan(0, (int)Math.Min(content.Length, 12));
+        if (contentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
+            return header.StartsWith("%PDF-"u8);
+        if (contentType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase))
+            return header.StartsWith(new byte[] { 0xFF, 0xD8, 0xFF });
+        if (contentType.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            return header.StartsWith(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+        if (contentType.Equals("image/webp", StringComparison.OrdinalIgnoreCase))
+            return header.Length >= 12 &&
+                   header[..4].SequenceEqual("RIFF"u8) &&
+                   header[8..12].SequenceEqual("WEBP"u8);
+        return false;
     }
 
     private bool TryGetCurrentActor(out Guid userId, out Guid clinicId)
