@@ -105,6 +105,12 @@ public sealed class ClinicalOrdersController(
                 Status = false,
                 Message = "Visit not found."
             }),
+            ClinicalOrderOutcome.VisitClosed => Conflict(new BaseResponse
+            {
+                Status = false,
+                Message = "Clinical orders cannot be changed after the visit is closed.",
+                Error = "visit_closed"
+            }),
             ClinicalOrderOutcome.Forbidden => StatusCode(
                 StatusCodes.Status403Forbidden,
                 new BaseResponse
