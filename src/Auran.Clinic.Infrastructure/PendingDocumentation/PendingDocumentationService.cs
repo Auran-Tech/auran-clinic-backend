@@ -96,6 +96,35 @@ public sealed class PendingDocumentationService(
         if (visit.DocumentationStatus is not (DocumentationStatus.Draft or DocumentationStatus.Pending))
             return new PendingDocumentationResult(PendingDocumentationOutcome.NotPending);
 
+        // Resolve the clinic-owned policy through the visit's assigned doctor.
+        // Unconfigured specialties retain the legacy at-least-one-field validation.
+        var requiredFields = await dbContext.Database.SqlQuery<string>(
+            $"""
+            SELECT p.RequiredFields AS Value
+            FROM dbo.DoctorDocumentationSpecialties AS d
+            INNER JOIN dbo.ClinicDocumentationSpecialtyPolicies AS p
+              ON p.ClinicId = d.ClinicId AND p.SpecialtyCode = d.SpecialtyCode
+            WHERE d.ClinicId = {clinicId} AND d.DoctorId = {visit.DoctorId}
+            """).SingleOrDefaultAsync(cancellationToken);
+
+        if (requiredFields is not null)
+        {
+            var missing = requiredFields.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(field => field switch
+                {
+                    "ChiefComplaint" => string.IsNullOrWhiteSpace(request.ChiefComplaint),
+                    "Examination" => string.IsNullOrWhiteSpace(request.Examination),
+                    "Diagnosis" => string.IsNullOrWhiteSpace(request.Diagnosis),
+                    "Notes" => string.IsNullOrWhiteSpace(request.Notes),
+                    "TreatmentPlan" => string.IsNullOrWhiteSpace(request.TreatmentPlan),
+                    _ => true
+                })
+                .ToArray();
+            if (missing.Length > 0)
+                return new PendingDocumentationResult(
+                    PendingDocumentationOutcome.MissingRequiredFields, MissingFields: missing);
+        }
+
         visit.ChiefComplaint = Clean(request.ChiefComplaint);
         visit.Examination = Clean(request.Examination);
         visit.Diagnosis = Clean(request.Diagnosis);
