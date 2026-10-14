@@ -426,7 +426,8 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             ("Patient_View", $"/api/clinical-orders?visitId={visitA}"),
             ("Visit_View", $"/api/patient-attachments?patientId={patientA}"),
             ("Visit_View", "/api/follow-ups?bucket=All"),
-            ("Files_View", $"/api/clinical-sessions/active?visitId={visitA}")
+            ("Files_View", $"/api/clinical-sessions/active?visitId={visitA}"),
+            ("Patient_View", "/api/documentation-policies?specialtyCode=GENERAL")
         };
         foreach (var (permission, path) in readDenials)
         {
@@ -440,6 +441,10 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         {
             ("Visit_View", HttpMethod.Put, "/api/clinical-orders"),
             ("Visit_View", HttpMethod.Put, "/api/clinical-sessions/documentation"),
+            ("Visit_View", HttpMethod.Put, "/api/pending-documentation/complete"),
+            ("Visit_View", HttpMethod.Post, "/api/clinical-sessions/start"),
+            ("Settings_View", HttpMethod.Put, "/api/documentation-policies"),
+            ("Settings_View", HttpMethod.Put, "/api/documentation-policies/doctors"),
             ("Queue_View", HttpMethod.Put, "/api/queue/move"),
             ("FollowUp_View", HttpMethod.Put, "/api/follow-ups/complete"),
             ("Files_View", HttpMethod.Delete, "/api/patient-attachments")
