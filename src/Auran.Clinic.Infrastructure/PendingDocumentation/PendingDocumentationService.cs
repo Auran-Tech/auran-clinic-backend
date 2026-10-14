@@ -21,11 +21,11 @@ public sealed class PendingDocumentationService(
                 visit.DocumentationStatus == DocumentationStatus.Draft ||
                 visit.DocumentationStatus == DocumentationStatus.Pending);
 
-        if (query.MineOnly &&
-            currentUserContext.IsAuthenticated &&
-            currentUserContext.UserId is Guid userId &&
-            !currentUserContext.IsSuperUser)
+        // A normal doctor must never bypass their assignment by supplying mineOnly=false.
+        if (!currentUserContext.IsSuperUser)
         {
+            if (!currentUserContext.IsAuthenticated || currentUserContext.UserId is not Guid userId)
+                return Array.Empty<PendingDocumentationResponse>();
             visits = visits.Where(visit => visit.DoctorId == userId);
         }
 
@@ -81,6 +81,8 @@ public sealed class PendingDocumentationService(
         visit.UpdatedDate = DateTime.UtcNow;
         visit.UpdatedByUserId = userId;
 
+        // Commit the state transition and its audit record in the same transaction.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditService.WriteAsync(
@@ -93,6 +95,7 @@ public sealed class PendingDocumentationService(
                 ["doctorId"] = visit.DoctorId
             },
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var response = await (
             from currentVisit in dbContext.Visits.AsNoTracking()

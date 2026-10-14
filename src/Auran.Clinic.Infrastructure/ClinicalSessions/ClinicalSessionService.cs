@@ -158,9 +158,10 @@ public sealed class ClinicalSessionService(
         session.UpdatedDate = now;
         session.UpdatedByUserId = userId;
 
-        visit.DocumentationStatus = HasDocumentation(visit)
-            ? DocumentationStatus.Completed
-            : DocumentationStatus.Pending;
+        // Session exit does not mean the record was clinically finalized.
+        // An authorized clinician must complete it using pending-documentation.
+        if (visit.DocumentationStatus != DocumentationStatus.Completed)
+            visit.DocumentationStatus = DocumentationStatus.Pending;
         visit.UpdatedDate = now;
         visit.UpdatedByUserId = userId;
 
