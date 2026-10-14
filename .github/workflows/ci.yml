@@ -111,11 +111,27 @@ jobs:
       - name: Publish API
         run: dotnet publish src/Auran.Clinic.Api/Auran.Clinic.Api.csproj --configuration Release --no-build --output ./artifacts/api
 
+      - name: Production startup rejects relative clinical storage
+        shell: bash
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          FileStorage__RootPath: relative/uploads
+          Cors__AllowedOrigins__0: https://clinic.example.invalid
+        run: |
+          set -euo pipefail
+          if dotnet ./artifacts/api/Auran.Clinic.Api.dll > /tmp/auran-unsafe-startup.log 2>&1; then
+            echo "Production startup unexpectedly accepted relative file storage"
+            exit 1
+          fi
+          grep -q 'FileStorage:RootPath' /tmp/auran-unsafe-startup.log
+
       - name: Hosted API and SQL readiness smoke
         shell: bash
         env:
           ASPNETCORE_URLS: http://127.0.0.1:5085
           ASPNETCORE_ENVIRONMENT: Production
+          FileStorage__RootPath: /tmp/auran-clinic-ci-private-uploads
+          Cors__AllowedOrigins__0: https://clinic.example.invalid
         run: |
           set -euo pipefail
           (cd ./artifacts/api && dotnet Auran.Clinic.Api.dll) > /tmp/auran-clinic-api.log 2>&1 &
