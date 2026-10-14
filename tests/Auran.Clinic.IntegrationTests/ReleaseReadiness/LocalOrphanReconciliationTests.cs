@@ -1,4 +1,5 @@
 using Auran.Clinic.Domain.Entities;
+using Auran.Clinic.Application.Files;
 using Auran.Clinic.Infrastructure.Files;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -13,6 +14,72 @@ namespace Auran.Clinic.IntegrationTests.ReleaseReadiness;
 public sealed class LocalOrphanReconciliationTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
+    [Fact]
+    public async Task Durable_outbox_retries_failed_provider_and_eventually_deletes_file()
+    {
+        var storage = factory.Services.GetRequiredService<IFileStorageService>();
+        var jobId = Guid.NewGuid();
+        string? storedKey = null;
+        try
+        {
+            await using var input = new MemoryStream("delayed clean-up"u8.ToArray());
+            var blob = await storage.SaveAsync(input, "test.pdf", "application/pdf");
+            storedKey = blob.StorageKey;
+
+            await using var scope = factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AuranClinicDbContext>();
+            // Intentionally unrecognized provider: a worker must retain the job,
+            // schedule a retry and not remove the existing file.
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO dbo.FileDeletionOutbox
+                    (Id, ClinicId, StorageProvider, StorageKey, NotBeforeUtc)
+                VALUES ({jobId}, {Guid.NewGuid()}, {"Unavailable"}, {blob.StorageKey}, SYSUTCDATETIME())
+                """);
+
+            var worker = new FileDeletionOutboxWorker(
+                factory.Services.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new FileDeletionOutboxOptions { Enabled = false }),
+                NullLogger<FileDeletionOutboxWorker>.Instance);
+
+            await worker.ProcessBatchAsync();
+
+            var failed = await db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox WHERE Id = @id AND CompletedAtUtc IS NULL AND AttemptCount >= 1 AND LastError IS NOT NULL AND NotBeforeUtc > SYSUTCDATETIME()",
+                new Microsoft.Data.SqlClient.SqlParameter("@id", jobId)).SingleAsync();
+            Assert.Equal(1, failed);
+            await using (var remaining = await storage.OpenReadAsync(blob.StorageKey))
+                Assert.True(remaining.CanRead);
+
+            // Simulate the storage provider becoming available and the retry
+            // deadline being reached, without delaying CI for a full minute.
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE dbo.FileDeletionOutbox
+                SET StorageProvider = {"Local"},
+                    NotBeforeUtc = DATEADD(second, -1, SYSUTCDATETIME()),
+                    LeaseUntilUtc = NULL
+                WHERE Id = {jobId}
+                """);
+
+            Assert.Equal(1, await worker.ProcessBatchAsync());
+            var succeeded = await db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox WHERE Id = @id AND CompletedAtUtc IS NOT NULL AND AttemptCount >= 2 AND LastError IS NULL",
+                new Microsoft.Data.SqlClient.SqlParameter("@id", jobId)).SingleAsync();
+            Assert.Equal(1, succeeded);
+            await Assert.ThrowsAsync<FileNotFoundException>(async () =>
+            {
+                await using var _ = await storage.OpenReadAsync(blob.StorageKey);
+            });
+            Assert.Equal(0, await worker.ProcessBatchAsync());
+        }
+        finally
+        {
+            if (storedKey is not null)
+                await storage.DeleteAsync(storedKey);
+        }
+    }
+
     [Fact]
     public async Task Reconciler_removes_only_old_unregistered_bytes_and_preserves_SQL_files()
     {
