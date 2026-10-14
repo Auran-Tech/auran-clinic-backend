@@ -109,8 +109,8 @@ public sealed class ConcurrentQueueTransitionTests : IClassFixture<WebApplicatio
 
         var payload = new { queueEntryId = entryId, toWorkflowStatusId = exitedId };
         var responses = await Task.WhenAll(
-            clientA.PostAsJsonAsync("/api/queue/move", payload),
-            clientB.PostAsJsonAsync("/api/queue/move", payload));
+            clientA.PutAsJsonAsync("/api/queue/move", payload),
+            clientB.PutAsJsonAsync("/api/queue/move", payload));
 
         Assert.Equal(1, responses.Count(response => response.StatusCode == HttpStatusCode.OK));
         Assert.Equal(1, responses.Count(response => response.StatusCode == HttpStatusCode.Conflict));
