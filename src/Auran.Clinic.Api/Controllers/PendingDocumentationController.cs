@@ -77,6 +77,13 @@ public sealed class PendingDocumentationController(
                     Status = false,
                     Message = "Only the assigned doctor or a Clinic Super User can complete this documentation."
                 }),
+            PendingDocumentationOutcome.MissingRequiredFields => BadRequest(new BaseResponse<IReadOnlyList<string>>
+            {
+                Status = false,
+                Error = "documentation_required_fields_missing",
+                Message = "Required documentation fields for this specialty are missing.",
+                Data = result.MissingFields
+            }),
             PendingDocumentationOutcome.NotPending => Conflict(new BaseResponse
             {
                 Status = false,
