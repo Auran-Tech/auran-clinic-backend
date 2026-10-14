@@ -272,8 +272,11 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload"));
-        using (var blockedDelete = await client.DeleteAsJsonAsync(
-            "/api/patient-attachments", new { attachmentId = referencedPatientAttachmentId }))
+        using (var deleteLinkedRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
+        {
+            Content = JsonContent.Create(new { attachmentId = referencedPatientAttachmentId })
+        })
+        using (var blockedDelete = await client.SendAsync(deleteLinkedRequest))
         {
             Assert.Equal(HttpStatusCode.Conflict, blockedDelete.StatusCode);
             Assert.Contains("attachment_in_use", await blockedDelete.Content.ReadAsStringAsync());
