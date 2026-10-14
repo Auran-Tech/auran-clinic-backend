@@ -95,7 +95,7 @@ public sealed class ClinicalSessionsController(
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
     [SwaggerOperation(
         Summary = "End a clinical session",
-        Description = "Ends the active clinical session and marks documentation Completed when clinical content exists, otherwise Pending.",
+        Description = "Ends the active clinical session without finalizing pending documentation.",
         OperationId = "ClinicalSessions_End",
         Tags = new[] { "Clinical Sessions" })]
     public async Task<ActionResult<BaseResponse<ClinicalSessionResponse>>> End(
@@ -151,6 +151,12 @@ public sealed class ClinicalSessionsController(
                 Status = false,
                 Message = "The visit is no longer open.",
                 Error = "visit_closed"
+            }),
+            ClinicalSessionOutcome.DocumentationAlreadyCompleted => Conflict(new BaseResponse
+            {
+                Status = false,
+                Message = "Clinical documentation has already been finalized and cannot be overwritten.",
+                Error = "documentation_already_completed"
             }),
             ClinicalSessionOutcome.Unauthenticated => Unauthorized(new BaseResponse
             {
