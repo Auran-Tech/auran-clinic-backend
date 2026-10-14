@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Models;
@@ -31,13 +33,6 @@ public sealed class VisitService(
         if (!doctorExists)
             return new VisitStartResult(VisitStartOutcome.DoctorNotFound);
 
-        var activeVisitExists = await dbContext.Visits.AsNoTracking()
-            .AnyAsync(
-                visit => visit.PatientId == request.PatientId && visit.Status == VisitStatus.Open,
-                cancellationToken);
-        if (activeVisitExists)
-            return new VisitStartResult(VisitStartOutcome.ActiveVisitExists);
-
         var initialStatus = await dbContext.WorkflowStatuses.AsNoTracking()
             .Where(status => !status.IsSystemFinal)
             .OrderBy(status => status.SortOrder)
@@ -50,6 +45,37 @@ public sealed class VisitService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            // Serialize check-ins for this clinic/patient across all API instances.
+            // The transaction-owned SQL application lock is released on commit/rollback.
+            var resource = $"auran:visit-start:{clinicId:N}:{request.PatientId:N}";
+            var result = new SqlParameter("@lockResult", SqlDbType.Int)
+            {
+                Direction = ParameterDirection.Output
+            };
+            var resourceParameter = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+            {
+                Value = resource
+            };
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "EXEC @lockResult = sys.sp_getapplock @Resource = @resource, " +
+                "@LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000",
+                [result, resourceParameter],
+                cancellationToken);
+
+            if (result.Value is not int lockResult || lockResult < 0)
+                throw new InvalidOperationException("Unable to acquire the patient visit-start lock.");
+
+            // This check must be inside the transaction AFTER acquiring the lock.
+            var activeVisitExists = await dbContext.Visits.AsNoTracking()
+                .AnyAsync(
+                    visit => visit.PatientId == request.PatientId && visit.Status == VisitStatus.Open,
+                    cancellationToken);
+            if (activeVisitExists)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new VisitStartResult(VisitStartOutcome.ActiveVisitExists);
+            }
+
             var visit = new Visit
             {
                 Id = Guid.NewGuid(),
