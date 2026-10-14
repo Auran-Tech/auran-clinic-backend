@@ -367,6 +367,56 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         using var gone = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
 
+        // Specialty requirements are clinic-managed, doctor-specific and checked
+        // only on explicit finalization, without silently completing draft notes.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
+        using (var forbiddenPolicy = await client.PutAsJsonAsync(
+            "/api/documentation-policies/GENERAL",
+            new { requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenPolicy.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Settings_Manage"));
+        using (var savedPolicy = await client.PutAsJsonAsync(
+            "/api/documentation-policies/GENERAL",
+            new { requiredFields = new[] { "ChiefComplaint", "Diagnosis" } }))
+            Assert.Equal(HttpStatusCode.OK, savedPolicy.StatusCode);
+
+        using (var foreignAssignment = await client.PutAsJsonAsync(
+            $"/api/documentation-policies/doctors/{doctorB}",
+            new { specialtyCode = "GENERAL" }))
+            Assert.Equal(HttpStatusCode.NotFound, foreignAssignment.StatusCode);
+
+        using (var assigned = await client.PutAsJsonAsync(
+            $"/api/documentation-policies/doctors/{userId}",
+            new { specialtyCode = "GENERAL" }))
+            Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+
+        var policyVisit = await db.Visits.SingleAsync(v => v.Id == visitA);
+        policyVisit.DocumentationStatus = Auran.Clinic.Domain.Enums.DocumentationStatus.Draft;
+        await db.SaveChangesAsync();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+        using (var incomplete = await client.PutAsJsonAsync(
+            "/api/pending-documentation/complete",
+            new { visitId = visitA, chiefComplaint = "Patient complaint recorded", notes = "Working draft" }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, incomplete.StatusCode);
+            Assert.Contains("documentation_required_fields_missing",
+                await incomplete.Content.ReadAsStringAsync());
+            Assert.Contains("Diagnosis", await incomplete.Content.ReadAsStringAsync());
+        }
+        Assert.Equal(Auran.Clinic.Domain.Enums.DocumentationStatus.Draft,
+            (await db.Visits.AsNoTracking().SingleAsync(v => v.Id == visitA)).DocumentationStatus);
+
+        using (var completedPolicy = await client.PutAsJsonAsync(
+            "/api/pending-documentation/complete",
+            new { visitId = visitA, chiefComplaint = "Patient complaint recorded",
+                  diagnosis = "Clinician-entered assessment" }))
+            Assert.Equal(HttpStatusCode.OK, completedPolicy.StatusCode);
+
         // Explicit negative permission matrix: permission for one clinical
         // capability must not transitively grant unrelated reads or writes.
         var readDenials = new (string Permission, string Path)[]
