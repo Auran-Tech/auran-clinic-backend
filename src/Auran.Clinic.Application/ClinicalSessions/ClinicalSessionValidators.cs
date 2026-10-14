@@ -26,3 +26,9 @@ public sealed class SaveClinicalDocumentationRequestValidator : AbstractValidato
         RuleFor(x => x.TreatmentPlan).MaximumLength(8000);
     }
 }
+
+public sealed class CompleteClinicalDocumentationRequestValidator : AbstractValidator<CompleteClinicalDocumentationRequest>
+{
+    public CompleteClinicalDocumentationRequestValidator() =>
+        RuleFor(x => x.VisitId).NotEmpty();
+}
