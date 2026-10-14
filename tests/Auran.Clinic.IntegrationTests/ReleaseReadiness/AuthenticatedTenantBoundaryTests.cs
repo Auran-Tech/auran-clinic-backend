@@ -198,6 +198,28 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         // Exercise real local storage and database lifecycle for an authorized patient.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload", "Files_View"));
+        // MIME headers are untrusted. Disguised content must be rejected before
+        // saving a FileRecord or a patient attachment.
+        using (var disguisedPdf = new MultipartFormDataContent())
+        {
+            disguisedPdf.Add(new StringContent(patientA.ToString()), "PatientId");
+            using var binary = new ByteArrayContent(new byte[] { 0x4D, 0x5A, 0x00, 0x00, 0x90, 0x00 });
+            binary.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            disguisedPdf.Add(binary, "File", "report.pdf");
+            using var response = await client.PostAsync("/api/patient-attachments", disguisedPdf);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        using (var disguisedImage = new MultipartFormDataContent())
+        {
+            disguisedImage.Add(new StringContent(patientA.ToString()), "PatientId");
+            using var binary = new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 });
+            binary.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            disguisedImage.Add(binary, "File", "scan.png");
+            using var response = await client.PostAsync("/api/patient-attachments", disguisedImage);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
         using var ownPayload = new MultipartFormDataContent();
         ownPayload.Add(new StringContent(patientA.ToString()), "PatientId");
         using var ownFile = new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 });
