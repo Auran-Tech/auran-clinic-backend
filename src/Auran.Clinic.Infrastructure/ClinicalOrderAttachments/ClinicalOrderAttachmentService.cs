@@ -262,6 +262,9 @@ public sealed class ClinicalOrderAttachmentService(
         if (!TryGetActor(out var userId, out _))
             return new ClinicalOrderAttachmentResult(ClinicalOrderAttachmentOutcome.Unauthenticated);
 
+        // The unlink, optional section cleanup and audit must commit together.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var link = await dbContext.ClinicalOrderAttachments
             .SingleOrDefaultAsync(item => item.Id == request.LinkId, cancellationToken);
 
@@ -330,6 +333,7 @@ public sealed class ClinicalOrderAttachmentService(
                 ["fileId"] = fileId
             },
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new ClinicalOrderAttachmentResult(
             ClinicalOrderAttachmentOutcome.Success,
