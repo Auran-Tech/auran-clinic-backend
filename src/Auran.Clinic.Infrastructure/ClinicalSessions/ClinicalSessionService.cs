@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.ClinicalSessions;
@@ -43,6 +45,28 @@ public sealed class ClinicalSessionService(
         if (!TryGetCurrentActor(out var userId))
             return new ClinicalSessionResult(ClinicalSessionOutcome.Unauthenticated);
 
+        if (currentUserContext.ClinicId is not Guid clinicId)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.Unauthenticated);
+
+        // A transaction-scoped SQL application lock serializes starts for the same
+        // clinic/visit across all API instances (including concurrent requests).
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var lockResult = new SqlParameter("@lockResult", SqlDbType.Int)
+        {
+            Direction = ParameterDirection.Output
+        };
+        var resource = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+        {
+            Value = $"auran:clinical-session-start:{clinicId:N}:{request.VisitId:N}"
+        };
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "EXEC @lockResult = sys.sp_getapplock @Resource = @resource, " +
+            "@LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000",
+            [lockResult, resource],
+            cancellationToken);
+        if (lockResult.Value is not int code || code < 0)
+            throw new InvalidOperationException("Unable to acquire the clinical session-start lock.");
+
         var visit = await dbContext.Visits
             .SingleOrDefaultAsync(item => item.Id == request.VisitId, cancellationToken);
         if (visit is null)
@@ -85,6 +109,7 @@ public sealed class ClinicalSessionService(
             session.Id.ToString(),
             new Dictionary<string, object?> { ["visitId"] = visit.Id },
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new ClinicalSessionResult(
             ClinicalSessionOutcome.Success,
