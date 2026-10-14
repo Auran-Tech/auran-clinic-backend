@@ -19,6 +19,7 @@ public sealed class ClinicalOrderAttachmentsController(
 {
     [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     [SwaggerOperation(
         Summary = "Get clinical order attachment workspace",
         Description = "Returns enabled Image/File order sections, eligible patient attachments, and current order links for a visit.",
@@ -56,6 +57,7 @@ public sealed class ClinicalOrderAttachmentsController(
 
     [HttpPost]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     [SwaggerOperation(
         Summary = "Link a patient file to a clinical order section",
         Description = "Links an existing patient attachment into an enabled Image/File clinical-order section. Assigned doctor or Clinic Super User only.",
@@ -74,6 +76,7 @@ public sealed class ClinicalOrderAttachmentsController(
 
     [HttpDelete]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.View)]
     [SwaggerOperation(
         Summary = "Unlink a clinical order attachment",
         Description = "Removes only the clinical-order link; the underlying patient file remains stored and attached to the patient.",
