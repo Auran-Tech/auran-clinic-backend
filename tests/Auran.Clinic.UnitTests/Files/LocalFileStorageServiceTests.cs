@@ -30,16 +30,15 @@ public sealed class LocalFileStorageServiceTests
 
     private sealed class FailingReadStream(byte[] bytes) : MemoryStream(bytes)
     {
-        private int _reads;
-
-        public override ValueTask<int> ReadAsync(
-            Memory<byte> buffer,
-            CancellationToken cancellationToken = default)
+        // MemoryStream optimizes CopyToAsync and can bypass ReadAsync overrides.
+        // Emulate a failed copy after some protected bytes have reached the disk.
+        public override async Task CopyToAsync(
+            Stream destination,
+            int bufferSize,
+            CancellationToken cancellationToken)
         {
-            if (Interlocked.Increment(ref _reads) > 1)
-                throw new IOException("Simulated upload stream failure.");
-
-            return base.ReadAsync(buffer, cancellationToken);
+            await destination.WriteAsync(new byte[4096], cancellationToken);
+            throw new IOException("Simulated upload stream failure.");
         }
     }
 
