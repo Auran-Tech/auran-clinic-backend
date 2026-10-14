@@ -14,12 +14,12 @@ namespace Auran.Clinic.Api.Controllers;
 [Produces("application/json")]
 public sealed class DocumentationPoliciesController(IDocumentationPolicyService service) : ControllerBase
 {
-    [HttpGet("{specialtyCode}")]
+    [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Settings.View)]
     [SwaggerOperation(Summary = "Get clinic specialty documentation requirements",
         OperationId = "DocumentationPolicies_Get", Tags = new[] { "Clinical Documentation" })]
     public async Task<ActionResult<BaseResponse<DocumentationPolicyResponse>>> Get(
-        string specialtyCode, CancellationToken ct)
+        [FromQuery] string specialtyCode, CancellationToken ct)
     {
         var code = DocumentationPolicyService.NormalizeSpecialty(specialtyCode);
         if (!DocumentationPolicyService.IsValidSpecialty(code))
@@ -30,14 +30,14 @@ public sealed class DocumentationPoliciesController(IDocumentationPolicyService 
         return Ok(new BaseResponse<DocumentationPolicyResponse> { Status = true, Data = policy });
     }
 
-    [HttpPut("{specialtyCode}")]
+    [HttpPut]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Settings.Manage)]
     [SwaggerOperation(Summary = "Configure required documentation fields for a clinic specialty",
         OperationId = "DocumentationPolicies_Update", Tags = new[] { "Clinical Documentation" })]
     public async Task<ActionResult<BaseResponse<DocumentationPolicyResponse>>> Update(
-        string specialtyCode, [FromBody] UpdateDocumentationPolicyRequest request, CancellationToken ct)
+        [FromBody] UpdateDocumentationPolicyRequest request, CancellationToken ct)
     {
-        var code = DocumentationPolicyService.NormalizeSpecialty(specialtyCode);
+        var code = DocumentationPolicyService.NormalizeSpecialty(request.SpecialtyCode);
         if (!DocumentationPolicyService.IsValidSpecialty(code) ||
             request.RequiredFields is not { Length: > 0 } fields ||
             fields.Length > DocumentationPolicyService.Fields.Count ||
@@ -49,17 +49,17 @@ public sealed class DocumentationPoliciesController(IDocumentationPolicyService 
         return Ok(new BaseResponse<DocumentationPolicyResponse> { Status = true, Data = result });
     }
 
-    [HttpPut("doctors/{doctorId:guid}")]
+    [HttpPut("doctors")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Settings.Manage)]
     [SwaggerOperation(Summary = "Assign a doctor's documentation specialty",
         OperationId = "DocumentationPolicies_AssignDoctor", Tags = new[] { "Clinical Documentation" })]
     public async Task<ActionResult<BaseResponse>> AssignDoctor(
-        Guid doctorId, [FromBody] AssignDoctorSpecialtyRequest request, CancellationToken ct)
+        [FromBody] AssignDoctorSpecialtyRequest request, CancellationToken ct)
     {
         var code = DocumentationPolicyService.NormalizeSpecialty(request.SpecialtyCode);
         if (!DocumentationPolicyService.IsValidSpecialty(code))
             return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
-        if (!await service.AssignDoctorAsync(doctorId, code, ct))
+        if (!await service.AssignDoctorAsync(request.DoctorId, code, ct))
             return NotFound(new BaseResponse { Status = false, Error = "doctor_not_found" });
         return Ok(new BaseResponse { Status = true, Message = "Documentation specialty assigned." });
     }
