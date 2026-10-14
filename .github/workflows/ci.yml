@@ -35,6 +35,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Validate production configuration preflight
+        shell: bash
+        run: |
+          bash -n scripts/production-preflight.sh
+          if ASPNETCORE_ENVIRONMENT=Production Jwt__SigningKey=short \
+             FileStorage__RootPath=/srv/auran/uploads Cors__AllowedOrigins__0=https://clinic.example.invalid \
+             bash scripts/production-preflight.sh; then
+            echo "Preflight must fail when the signing key is unsafe"
+            exit 1
+          fi
+          ASPNETCORE_ENVIRONMENT=Production \
+          FileStorage__RootPath=/srv/auran/uploads \
+          Cors__AllowedOrigins__0=https://clinic.example.invalid \
+          bash scripts/production-preflight.sh
+
       - name: Restore tools
         run: dotnet tool restore
 
