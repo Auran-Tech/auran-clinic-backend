@@ -167,6 +167,7 @@ public sealed class VisitService(
 
         var items = await baseQuery
             .OrderByDescending(item => item.Visit.EntryAtUtc)
+            .ThenByDescending(item => item.Visit.Id)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(item => new PatientVisitHistoryItemResponse(
