@@ -7,6 +7,9 @@ public sealed class FileStorageOptions
 {
     public const string SectionName = "FileStorage";
     public string RootPath { get; init; } = "App_Data/uploads";
+    public bool OrphanCleanupEnabled { get; init; } = false;
+    public int OrphanGracePeriodHours { get; init; } = 24;
+    public int OrphanCleanupIntervalMinutes { get; init; } = 60;
 }
 
 public sealed class LocalFileStorageService : IFileStorageService
@@ -117,6 +120,60 @@ public sealed class LocalFileStorageService : IFileStorageService
             File.Delete(absolutePath);
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Enumerates only old, locally generated storage keys. A final SQL record
+    /// existence check must be made by the caller immediately before deletion.
+    /// </summary>
+    public IReadOnlyList<string> GetOrphanCandidates(DateTime olderThanUtc)
+    {
+        if (!Directory.Exists(_rootPath))
+            return [];
+
+        var results = new List<string>();
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+
+        foreach (var path in Directory.EnumerateFiles(_rootPath, "*", options))
+        {
+            var relative = Path.GetRelativePath(_rootPath, path)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            var parts = relative.Split('/');
+            if (parts.Length != 3 ||
+                parts[0].Length != 4 || !int.TryParse(parts[0], out var year) ||
+                year < 2000 || year > 9999 ||
+                parts[1].Length != 2 || !int.TryParse(parts[1], out var month) ||
+                month is < 1 or > 12)
+                continue;
+
+            var extension = Path.GetExtension(parts[2]);
+            if (extension is not (".pdf" or ".jpg" or ".png" or ".webp" or ".bin"))
+                continue;
+
+            var filename = Path.GetFileNameWithoutExtension(parts[2]);
+            if (filename.Length != 32 || !Guid.TryParseExact(filename, "N", out _))
+                continue;
+
+            // Revalidate every existing component against symlink escapes.
+            try
+            {
+                _ = ResolvePath(relative);
+            }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTimeUtc(path) < olderThanUtc)
+                results.Add(relative);
+        }
+
+        return results;
     }
 
     private string ResolvePath(string storageKey)
