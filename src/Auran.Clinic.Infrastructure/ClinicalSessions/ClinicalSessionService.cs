@@ -158,9 +158,9 @@ public sealed class ClinicalSessionService(
         session.UpdatedDate = now;
         session.UpdatedByUserId = userId;
 
-        visit.DocumentationStatus = HasDocumentation(visit)
-            ? DocumentationStatus.Completed
-            : DocumentationStatus.Pending;
+        // Closing a clinical session does not finalize the clinical record.
+        if (visit.DocumentationStatus != DocumentationStatus.Completed)
+            visit.DocumentationStatus = DocumentationStatus.Pending;
         visit.UpdatedDate = now;
         visit.UpdatedByUserId = userId;
 
@@ -180,6 +180,53 @@ public sealed class ClinicalSessionService(
         return new ClinicalSessionResult(
             ClinicalSessionOutcome.Success,
             Map(session, visit));
+    }
+
+    public async Task<ClinicalSessionResult> CompleteDocumentationAsync(
+        CompleteClinicalDocumentationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var userId))
+            return new ClinicalSessionResult(ClinicalSessionOutcome.Unauthenticated);
+
+        var visit = await dbContext.Visits.SingleOrDefaultAsync(
+            item => item.Id == request.VisitId, cancellationToken);
+        if (visit is null)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.VisitNotFound);
+        if (visit.DoctorId != userId && !currentUserContext.IsSuperUser)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.Forbidden);
+        if (visit.DocumentationStatus == DocumentationStatus.Completed)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.DocumentationAlreadyCompleted);
+        if (!HasDocumentation(visit))
+            return new ClinicalSessionResult(ClinicalSessionOutcome.DocumentationIncomplete);
+
+        var lastSession = await dbContext.VisitSessions
+            .Where(item => item.VisitId == visit.Id)
+            .OrderByDescending(item => item.StartedAtUtc)
+            .ThenByDescending(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (lastSession is null)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.SessionNotFound);
+
+        // A completed record is an explicit clinician action and remains separate
+        // from whether the visit or patient queue is operationally open.
+        var now = DateTime.UtcNow;
+        visit.DocumentationStatus = DocumentationStatus.Completed;
+        visit.CompletedAtUtc = now;
+        visit.UpdatedDate = now;
+        visit.UpdatedByUserId = userId;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditService.WriteAsync(
+            "ClinicalDocumentation.Completed",
+            nameof(Visit),
+            visit.Id.ToString(),
+            new Dictionary<string, object?> { ["sessionId"] = lastSession.Id },
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new ClinicalSessionResult(ClinicalSessionOutcome.Success, Map(lastSession, visit));
     }
 
     private bool TryGetCurrentActor(out Guid userId)
