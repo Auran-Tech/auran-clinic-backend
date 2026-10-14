@@ -94,6 +94,47 @@ public sealed class LocalFileStorageServiceTests
     }
 
     [Fact]
+    public async Task Orphan_candidate_scan_returns_only_aged_generated_files()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "auran-files-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = new LocalFileStorageService(
+                Options.Create(new FileStorageOptions { RootPath = root }));
+
+            await using var first = new MemoryStream("old"u8.ToArray());
+            var aged = await storage.SaveAsync(first, "old.pdf", "application/pdf");
+            var oldFile = Path.Combine(root, aged.StorageKey.Replace('/', Path.DirectorySeparatorChar));
+            File.SetLastWriteTimeUtc(oldFile, DateTime.UtcNow.AddDays(-3));
+
+            await using var second = new MemoryStream("fresh"u8.ToArray());
+            var recent = await storage.SaveAsync(second, "recent.pdf", "application/pdf");
+
+            var arbitrary = Path.Combine(root, "2026", "10", "patient-notes.pdf");
+            Directory.CreateDirectory(Path.GetDirectoryName(arbitrary)!);
+            await File.WriteAllTextAsync(arbitrary, "legacy");
+            File.SetLastWriteTimeUtc(arbitrary, DateTime.UtcNow.AddDays(-3));
+
+            var candidates = storage.GetOrphanCandidates(DateTime.UtcNow.AddHours(-24));
+            Assert.Contains(aged.StorageKey, candidates);
+            Assert.DoesNotContain(recent.StorageKey, candidates);
+            Assert.DoesNotContain("2026/10/patient-notes.pdf", candidates);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Orphan_cleanup_is_disabled_by_default()
+    {
+        Assert.False(new FileStorageOptions().OrphanCleanupEnabled);
+        Assert.True(new FileStorageOptions().OrphanGracePeriodHours >= 24);
+    }
+
+    [Fact]
     public async Task Save_open_and_delete_round_trip()
     {
         var root = Path.Combine(Path.GetTempPath(), "auran-files-" + Guid.NewGuid().ToString("N"));
