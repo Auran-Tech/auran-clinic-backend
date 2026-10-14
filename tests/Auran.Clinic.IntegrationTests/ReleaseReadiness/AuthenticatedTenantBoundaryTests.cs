@@ -417,6 +417,21 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
                   diagnosis = "Clinician-entered assessment" }))
             Assert.Equal(HttpStatusCode.OK, completedPolicy.StatusCode);
 
+        var completionAuditJson = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.Action == "ClinicalDocumentation.Completed" &&
+                log.ClinicId == clinicA && log.EntityId == visitA.ToString())
+            .Select(log => log.MetadataJson)
+            .SingleAsync();
+        Assert.NotNull(completionAuditJson);
+        using (var policyAudit = JsonDocument.Parse(completionAuditJson))
+        {
+            Assert.Equal(1, policyAudit.RootElement
+                .GetProperty("documentationPolicyVersion").GetInt32());
+            Assert.Equal("GENERAL", policyAudit.RootElement
+                .GetProperty("specialtyCode").GetString());
+            Assert.DoesNotContain("Clinician-entered assessment", completionAuditJson);
+        }
+
         // Explicit negative permission matrix: permission for one clinical
         // capability must not transitively grant unrelated reads or writes.
         var readDenials = new (string Permission, string Path)[]
