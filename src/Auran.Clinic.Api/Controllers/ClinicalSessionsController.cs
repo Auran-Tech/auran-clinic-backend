@@ -16,8 +16,7 @@ public sealed class ClinicalSessionsController(
     IClinicalSessionService clinicalSessionService,
     IValidator<StartClinicalSessionRequest> startValidator,
     IValidator<SaveClinicalDocumentationRequest> saveValidator,
-    IValidator<EndClinicalSessionRequest> endValidator,
-    IValidator<CompleteClinicalDocumentationRequest> completeValidator) : ControllerBase
+    IValidator<EndClinicalSessionRequest> endValidator) : ControllerBase
 {
     [HttpGet("active")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
@@ -96,7 +95,7 @@ public sealed class ClinicalSessionsController(
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
     [SwaggerOperation(
         Summary = "End a clinical session",
-        Description = "Ends the active clinical session without finalizing documentation; drafts remain pending.",
+        Description = "Ends the active clinical session and marks documentation Completed when clinical content exists, otherwise Pending.",
         OperationId = "ClinicalSessions_End",
         Tags = new[] { "Clinical Sessions" })]
     public async Task<ActionResult<BaseResponse<ClinicalSessionResponse>>> End(
@@ -108,24 +107,6 @@ public sealed class ClinicalSessionsController(
             return ValidationFailure();
 
         return Map(await clinicalSessionService.EndAsync(request, cancellationToken));
-    }
-
-    [HttpPut("documentation/complete")]
-    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Edit)]
-    [SwaggerOperation(
-        Summary = "Explicitly finalize clinical documentation",
-        Description = "Only the assigned doctor or a Clinic Super User may complete a documented visit, including after the visit has exited the queue.",
-        OperationId = "ClinicalSessions_CompleteDocumentation",
-        Tags = new[] { "Clinical Sessions" })]
-    public async Task<ActionResult<BaseResponse<ClinicalSessionResponse>>> CompleteDocumentation(
-        [FromBody] CompleteClinicalDocumentationRequest request,
-        CancellationToken cancellationToken)
-    {
-        var validation = await completeValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return ValidationFailure();
-
-        return Map(await clinicalSessionService.CompleteDocumentationAsync(request, cancellationToken));
     }
 
     private ActionResult<BaseResponse<ClinicalSessionResponse>> Map(
@@ -170,18 +151,6 @@ public sealed class ClinicalSessionsController(
                 Status = false,
                 Message = "The visit is no longer open.",
                 Error = "visit_closed"
-            }),
-            ClinicalSessionOutcome.DocumentationIncomplete => Conflict(new BaseResponse
-            {
-                Status = false,
-                Message = "Clinical documentation must contain content before completion.",
-                Error = "documentation_incomplete"
-            }),
-            ClinicalSessionOutcome.DocumentationAlreadyCompleted => Conflict(new BaseResponse
-            {
-                Status = false,
-                Message = "Clinical documentation has already been completed.",
-                Error = "documentation_already_completed"
             }),
             ClinicalSessionOutcome.Unauthenticated => Unauthorized(new BaseResponse
             {
