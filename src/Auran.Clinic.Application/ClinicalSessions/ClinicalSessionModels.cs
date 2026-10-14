@@ -41,6 +41,7 @@ public enum ClinicalSessionOutcome
     SessionAlreadyActive,
     SessionNotFound,
     VisitClosed,
+    DocumentationAlreadyCompleted,
     Unauthenticated
 }
 
