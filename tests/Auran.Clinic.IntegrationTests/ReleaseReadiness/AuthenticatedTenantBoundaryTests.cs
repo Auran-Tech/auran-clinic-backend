@@ -400,7 +400,11 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
                 "Bearer", CreateToken(configuration, userId, clinicA, sessionId, permission));
             using var deniedMutation = new HttpRequestMessage(method, path)
             {
-                Content = JsonContent.Create(new { })
+                // Match the endpoint's media type so authorization, not 415,
+                // is the reason an unauthorized upload is denied.
+                Content = path == "/api/patient-attachments" && method == HttpMethod.Post
+                    ? new MultipartFormDataContent()
+                    : JsonContent.Create(new { })
             };
             using var response = await client.SendAsync(deniedMutation);
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
