@@ -20,7 +20,8 @@ check "$env_ok" 'Production ASP.NET environment'
 [[ -n "${ConnectionStrings__DefaultConnection:-}" ]] && db_ok=1 || db_ok=0
 check "$db_ok" 'SQL connection string injected by secret store'
 
-[[ ${#Jwt__SigningKey} -ge 32 ]] 2>/dev/null && jwt_ok=1 || jwt_ok=0
+signing_key="${Jwt__SigningKey:-}"
+[[ ${#signing_key} -ge 32 ]] && jwt_ok=1 || jwt_ok=0
 check "$jwt_ok" 'JWT signing key at least 32 characters'
 
 [[ "${PlatformBootstrap__Enabled:-false}" != "true" ]] && bootstrap_ok=1 || bootstrap_ok=0
