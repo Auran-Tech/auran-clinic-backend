@@ -47,22 +47,49 @@ public sealed class LocalFileStorageService : IFileStorageService
 
         Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
 
-        await using var output = new FileStream(
-            absolutePath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 81920,
-            useAsync: true);
+        try
+        {
+            long written;
+            await using (var output = new FileStream(
+                absolutePath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true))
+            {
+                await content.CopyToAsync(output, cancellationToken);
+                await output.FlushAsync(cancellationToken);
+                written = output.Length;
+            }
 
-        await content.CopyToAsync(output, cancellationToken);
-        await output.FlushAsync(cancellationToken);
+            return new StoredFileWriteResult(
+                "Local",
+                relativeKey,
+                storedName,
+                written);
+        }
+        catch
+        {
+            // Dispose the output stream before cleanup; a failed copy must not
+            // leave an untracked partial file containing sensitive patient data.
+            try
+            {
+                if (File.Exists(absolutePath))
+                    File.Delete(absolutePath);
+            }
+            catch (IOException)
+            {
+                // Preserve the original write exception; persistent/orphaned blobs
+                // still require durable reconciliation (release issue #120).
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Cleanup failures are separately addressed by the outbox/reconciler.
+            }
 
-        return new StoredFileWriteResult(
-            "Local",
-            relativeKey,
-            storedName,
-            output.Length);
+            throw;
+        }
     }
 
     public Task<Stream> OpenReadAsync(
