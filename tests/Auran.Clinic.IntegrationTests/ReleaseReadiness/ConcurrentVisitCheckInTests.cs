@@ -101,6 +101,10 @@ public sealed class ConcurrentVisitCheckInTests : IClassFixture<WebApplicationFa
             .CountAsync(history => history.ClinicId == clinicId &&
                 verify.QueueEntries.Any(entry => entry.Id == history.QueueEntryId && entry.VisitId == visits[0])));
 
+        Assert.Equal(1, await verify.AuditLogs.AsNoTracking()
+            .CountAsync(audit => audit.ClinicId == clinicId &&
+                audit.Action == "Visit.Started" && audit.EntityId == visits[0].ToString()));
+
         foreach (var response in responses) response.Dispose();
     }
 
