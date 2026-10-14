@@ -1,4 +1,5 @@
 using Auran.Clinic.Domain.Entities;
+using Auran.Clinic.Application.Files;
 using Auran.Clinic.Infrastructure.Files;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -16,14 +17,14 @@ public sealed class LocalOrphanReconciliationTests(WebApplicationFactory<Program
     [Fact]
     public async Task Durable_outbox_retries_failed_provider_and_eventually_deletes_file()
     {
-        var root = Path.Combine(Path.GetTempPath(), "auran-outbox-retry-" + Guid.NewGuid().ToString("N"));
-        var settings = Options.Create(new FileStorageOptions { RootPath = root });
+        var storage = factory.Services.GetRequiredService<IFileStorageService>();
         var jobId = Guid.NewGuid();
+        string? storedKey = null;
         try
         {
-            var storage = new LocalFileStorageService(settings);
             await using var input = new MemoryStream("delayed clean-up"u8.ToArray());
             var blob = await storage.SaveAsync(input, "test.pdf", "application/pdf");
+            storedKey = blob.StorageKey;
 
             await using var scope = factory.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<AuranClinicDbContext>();
@@ -74,8 +75,8 @@ public sealed class LocalOrphanReconciliationTests(WebApplicationFactory<Program
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
+            if (storedKey is not null)
+                await storage.DeleteAsync(storedKey);
         }
     }
 
