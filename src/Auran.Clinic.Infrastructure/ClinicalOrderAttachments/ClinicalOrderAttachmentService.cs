@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.ClinicalOrderAttachments;
@@ -151,6 +153,24 @@ public sealed class ClinicalOrderAttachmentService(
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Serialize order/section/link creation for this visit across API instances.
+        // The app lock is released when the SQL transaction commits or rolls back.
+        var lockResult = new SqlParameter("@lockResult", SqlDbType.Int)
+        {
+            Direction = ParameterDirection.Output
+        };
+        var resource = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+        {
+            Value = $"auran:clinical-order-attachment-link:{clinicId:N}:{visit.Id:N}"
+        };
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "EXEC @lockResult = sys.sp_getapplock @Resource = @resource, " +
+            "@LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000",
+            [lockResult, resource],
+            cancellationToken);
+        if (lockResult.Value is not int code || code < 0)
+            throw new InvalidOperationException("Unable to acquire the attachment linking lock.");
 
         try
         {
