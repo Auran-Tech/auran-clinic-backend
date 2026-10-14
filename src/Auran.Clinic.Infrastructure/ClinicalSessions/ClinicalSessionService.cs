@@ -51,6 +51,8 @@ public sealed class ClinicalSessionService(
             return new ClinicalSessionResult(ClinicalSessionOutcome.VisitClosed);
         if (visit.DoctorId != userId && !currentUserContext.IsSuperUser)
             return new ClinicalSessionResult(ClinicalSessionOutcome.Forbidden);
+        if (visit.DocumentationStatus == DocumentationStatus.Completed)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.DocumentationAlreadyCompleted);
 
         var activeExists = await dbContext.VisitSessions.AsNoTracking()
             .AnyAsync(item => item.VisitId == visit.Id && item.EndedAtUtc == null, cancellationToken);
@@ -102,6 +104,8 @@ public sealed class ClinicalSessionService(
             return new ClinicalSessionResult(ClinicalSessionOutcome.VisitNotFound);
         if (visit.DoctorId != userId && !currentUserContext.IsSuperUser)
             return new ClinicalSessionResult(ClinicalSessionOutcome.Forbidden);
+        if (visit.DocumentationStatus == DocumentationStatus.Completed)
+            return new ClinicalSessionResult(ClinicalSessionOutcome.DocumentationAlreadyCompleted);
 
         var session = await dbContext.VisitSessions
             .SingleOrDefaultAsync(
