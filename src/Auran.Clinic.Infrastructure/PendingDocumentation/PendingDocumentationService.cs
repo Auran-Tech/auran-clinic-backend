@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.PendingDocumentation;
@@ -61,6 +63,28 @@ public sealed class PendingDocumentationService(
         if (!currentUserContext.IsAuthenticated || currentUserContext.UserId is not Guid userId)
             return new PendingDocumentationResult(PendingDocumentationOutcome.Unauthenticated);
 
+        if (currentUserContext.ClinicId is not Guid clinicId)
+            return new PendingDocumentationResult(PendingDocumentationOutcome.Unauthenticated);
+
+        // Serialize finalization before reading the mutable documentation state.
+        // Competing requests must observe the first committed completion.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var lockResult = new SqlParameter("@lockResult", SqlDbType.Int)
+        {
+            Direction = ParameterDirection.Output
+        };
+        var resource = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+        {
+            Value = $"auran:clinical-documentation-complete:{clinicId:N}:{request.VisitId:N}"
+        };
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "EXEC @lockResult = sys.sp_getapplock @Resource = @resource, " +
+            "@LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000",
+            [lockResult, resource],
+            cancellationToken);
+        if (lockResult.Value is not int code || code < 0)
+            throw new InvalidOperationException("Unable to acquire clinical documentation finalization lock.");
+
         var visit = await dbContext.Visits
             .SingleOrDefaultAsync(item => item.Id == request.VisitId, cancellationToken);
         if (visit is null)
@@ -82,7 +106,6 @@ public sealed class PendingDocumentationService(
         visit.UpdatedByUserId = userId;
 
         // Commit the state transition and its audit record in the same transaction.
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditService.WriteAsync(
