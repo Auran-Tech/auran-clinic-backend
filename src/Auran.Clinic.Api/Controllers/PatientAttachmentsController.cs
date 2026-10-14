@@ -128,6 +128,10 @@ public sealed class PatientAttachmentsController(
         if (file is null)
             return NotFound();
 
+        // Patient records must not be retained in shared browser/proxy caches.
+        Response.Headers.CacheControl = "private, no-store, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(file.Content, file.ContentType, file.OriginalName);
     }
 
