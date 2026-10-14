@@ -50,6 +50,7 @@ public enum ClinicalOrderOutcome
 {
     Success,
     VisitNotFound,
+    VisitClosed,
     Forbidden,
     InvalidSectionDefinition,
     Unauthenticated
