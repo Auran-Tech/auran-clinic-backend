@@ -216,6 +216,50 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.False(await db.ClinicalOrders.AsNoTracking()
             .AnyAsync(order => order.VisitId == closedVisitId));
 
+        // Saving text/structured content must never drop preexisting File/Image
+        // sections and the linked patient attachment.
+        var orderId = Guid.NewGuid();
+        var fileSectionId = Guid.NewGuid();
+        var fileDefinitionId = Guid.NewGuid();
+        var fileLinkId = Guid.NewGuid();
+        db.ClinicalOrderSectionDefinitions.Add(new ClinicalOrderSectionDefinition
+        {
+            Id = fileDefinitionId, ClinicId = clinicA, Name = "Attached studies",
+            SectionType = Auran.Clinic.Domain.Enums.ClinicalOrderSectionType.File,
+            IsEnabled = true, SortOrder = 0
+        });
+        db.ClinicalOrders.Add(new ClinicalOrder
+        {
+            Id = orderId, ClinicId = clinicA, VisitId = visitA,
+            PatientId = patientA, DoctorId = userId, CreatedByUserId = userId
+        });
+        db.ClinicalOrderSections.Add(new ClinicalOrderSection
+        {
+            Id = fileSectionId, ClinicId = clinicA,
+            ClinicalOrderId = orderId, SectionDefinitionId = fileDefinitionId
+        });
+        db.ClinicalOrderAttachments.Add(new ClinicalOrderAttachment
+        {
+            Id = fileLinkId, ClinicId = clinicA,
+            ClinicalOrderId = orderId,
+            ClinicalOrderSectionId = fileSectionId, FileId = fileA
+        });
+        await db.SaveChangesAsync();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+        using (var updateOrder = await client.PutAsJsonAsync(
+            "/api/clinical-orders", new { visitId = visitA, sections = Array.Empty<object>() }))
+        {
+            Assert.Equal(HttpStatusCode.OK, updateOrder.StatusCode);
+        }
+        Assert.True(await db.ClinicalOrderSections.AsNoTracking()
+            .AnyAsync(section => section.Id == fileSectionId &&
+                section.SectionDefinitionId == fileDefinitionId));
+        Assert.True(await db.ClinicalOrderAttachments.AsNoTracking()
+            .AnyAsync(link => link.Id == fileLinkId &&
+                link.ClinicalOrderSectionId == fileSectionId && link.FileId == fileA));
+
         // Exercise real local storage and database lifecycle for an authorized patient.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload", "Files_View"));
