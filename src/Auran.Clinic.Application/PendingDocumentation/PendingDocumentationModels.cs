@@ -39,9 +39,11 @@ public enum PendingDocumentationOutcome
     VisitNotFound,
     Forbidden,
     NotPending,
+    MissingRequiredFields,
     Unauthenticated
 }
 
 public sealed record PendingDocumentationResult(
     PendingDocumentationOutcome Outcome,
-    PendingDocumentationResponse? Documentation = null);
+    PendingDocumentationResponse? Documentation = null,
+    IReadOnlyList<string>? MissingFields = null);
