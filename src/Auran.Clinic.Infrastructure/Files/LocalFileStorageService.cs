@@ -121,11 +121,36 @@ public sealed class LocalFileStorageService : IFileStorageService
 
     private string ResolvePath(string storageKey)
     {
-        var normalizedKey = storageKey.Replace('/', Path.DirectorySeparatorChar);
+        // Storage keys are server-generated relative paths, never arbitrary filesystem
+        // paths. Reject both separator forms on every OS, including traversal keys.
+        if (string.IsNullOrWhiteSpace(storageKey) ||
+            Path.IsPathRooted(storageKey) ||
+            storageKey.Split(['/', '\\']).Any(part =>
+                part.Length == 0 || part is "." or ".." || part.Contains(':')))
+            throw new InvalidOperationException("Invalid file storage key.");
+
+        var normalizedKey = storageKey.Replace('/', Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar);
         var fullPath = Path.GetFullPath(Path.Combine(_rootPath, normalizedKey));
 
-        if (!fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, comparison))
             throw new InvalidOperationException("Invalid file storage key.");
+
+        // Lexical containment is not enough when an existing child directory or
+        // file is a symlink/junction to a location outside of our storage root.
+        var current = _rootPath;
+        foreach (var part in normalizedKey.Split(Path.DirectorySeparatorChar))
+        {
+            current = Path.Combine(current, part);
+            if (File.Exists(current) || Directory.Exists(current))
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException("Linked file storage paths are not allowed.");
+            }
+        }
 
         return fullPath;
     }

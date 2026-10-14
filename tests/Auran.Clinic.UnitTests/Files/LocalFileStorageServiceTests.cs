@@ -42,6 +42,57 @@ public sealed class LocalFileStorageServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("../outside.pdf")]
+    [InlineData("2026/../outside.pdf")]
+    [InlineData("2026/./file.pdf")]
+    [InlineData("2026\\\\..\\\\outside.pdf")]
+    [InlineData("/etc/passwd")]
+    [InlineData("C:\\\\Windows\\\\system.ini")]
+    public async Task Storage_operations_reject_untrusted_keys(string key)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "auran-files-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new LocalFileStorageService(
+                Options.Create(new FileStorageOptions { RootPath = root }));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.OpenReadAsync(key));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAsync(key));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Storage_rejects_child_directory_symlink_that_escapes_root()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "auran-files-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "auran-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "secret.pdf"), "sensitive");
+        try
+        {
+            var service = new LocalFileStorageService(
+                Options.Create(new FileStorageOptions { RootPath = root }));
+            Directory.CreateSymbolicLink(Path.Combine(root, "linked"), outside);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.OpenReadAsync("linked/secret.pdf"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.DeleteAsync("linked/secret.pdf"));
+            Assert.True(File.Exists(Path.Combine(outside, "secret.pdf")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+            if (Directory.Exists(outside))
+                Directory.Delete(outside, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task Save_open_and_delete_round_trip()
     {
