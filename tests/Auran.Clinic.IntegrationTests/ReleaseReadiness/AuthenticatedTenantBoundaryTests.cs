@@ -233,6 +233,9 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         var attachmentId = result.RootElement.GetProperty("data").GetProperty("attachmentId").GetGuid();
         using var downloaded = await client.GetAsync($"/api/patient-attachments/download?fileId={fileId}");
         Assert.Equal(HttpStatusCode.OK, downloaded.StatusCode);
+        Assert.True(downloaded.Headers.CacheControl?.NoStore);
+        Assert.True(downloaded.Headers.TryGetValues("X-Content-Type-Options", out var sniffOptions));
+        Assert.Contains("nosniff", sniffOptions);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2d, 0x31 }, await downloaded.Content.ReadAsByteArrayAsync());
         using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
         {
