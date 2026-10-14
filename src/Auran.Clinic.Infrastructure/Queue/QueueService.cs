@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
 using Auran.Clinic.Application.Queue;
@@ -71,6 +73,28 @@ public sealed class QueueService(
         if (!TryGetCurrentActor(out var userId))
             return new QueueMoveResult(QueueMoveOutcome.Unauthenticated);
 
+        if (currentUserContext.ClinicId is not Guid clinicId)
+            return new QueueMoveResult(QueueMoveOutcome.Unauthenticated);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // Acquire the lock before checking the current stage. A concurrent move
+        // must see the committed stage or exit, not a stale transition.
+        var result = new SqlParameter("@lockResult", SqlDbType.Int)
+        {
+            Direction = ParameterDirection.Output
+        };
+        var resource = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+        {
+            Value = $"auran:queue-move:{clinicId:N}:{request.QueueEntryId:N}"
+        };
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "EXEC @lockResult = sys.sp_getapplock @Resource = @resource, " +
+            "@LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000",
+            [result, resource],
+            cancellationToken);
+        if (result.Value is not int code || code < 0)
+            throw new InvalidOperationException("Unable to acquire the queue transition lock.");
+
         var entry = await dbContext.QueueEntries
             .SingleOrDefaultAsync(item => item.Id == request.QueueEntryId, cancellationToken);
         if (entry is null)
@@ -138,6 +162,7 @@ public sealed class QueueService(
                 ["isFinal"] = targetStatus.IsSystemFinal
             },
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var response = await (
             from queue in dbContext.QueueEntries.AsNoTracking()
