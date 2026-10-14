@@ -390,6 +390,8 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         {
             ("Visit_View", HttpMethod.Put, "/api/clinical-orders"),
             ("Visit_View", HttpMethod.Put, "/api/clinical-sessions/documentation"),
+            ("Visit_View", HttpMethod.Put, "/api/pending-documentation/complete"),
+            ("Visit_View", HttpMethod.Post, "/api/clinical-sessions/start"),
             ("Queue_View", HttpMethod.Put, "/api/queue/move"),
             ("FollowUp_View", HttpMethod.Put, "/api/follow-ups/complete"),
             ("Files_View", HttpMethod.Delete, "/api/patient-attachments")
