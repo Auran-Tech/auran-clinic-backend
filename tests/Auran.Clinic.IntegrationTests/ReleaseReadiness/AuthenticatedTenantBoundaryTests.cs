@@ -112,13 +112,21 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View"));
-        foreach (var endpoint in new[] { "clinical-measurements", "clinical-order-attachments" })
-        {
-            var ownResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitA}");
-            var foreignResponse = await client.GetAsync($"/api/{endpoint}?visitId={visitB}");
-            Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, foreignResponse.StatusCode);
-        }
+        var ownMeasurements = await client.GetAsync($"/api/clinical-measurements?visitId={visitA}");
+        var foreignMeasurements = await client.GetAsync($"/api/clinical-measurements?visitId={visitB}");
+        Assert.Equal(HttpStatusCode.OK, ownMeasurements.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, foreignMeasurements.StatusCode);
+
+        // The order attachment workspace exposes file names/notes and needs Files_View.
+        var fileWorkspaceDenied = await client.GetAsync($"/api/clinical-order-attachments?visitId={visitA}");
+        Assert.Equal(HttpStatusCode.Forbidden, fileWorkspaceDenied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_View", "Files_View"));
+        var ownFileWorkspace = await client.GetAsync($"/api/clinical-order-attachments?visitId={visitA}");
+        var foreignFileWorkspace = await client.GetAsync($"/api/clinical-order-attachments?visitId={visitB}");
+        Assert.Equal(HttpStatusCode.OK, ownFileWorkspace.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, foreignFileWorkspace.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
@@ -181,7 +189,7 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(HttpStatusCode.NotFound, crossTenantWrite.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit", "Files_View"));
         var crossTenantOrderAttachmentWrite = await client.PostAsJsonAsync(
             "/api/clinical-order-attachments",
             new { visitId = visitB, fileId = Guid.NewGuid(), sectionDefinitionId = Guid.NewGuid() });
