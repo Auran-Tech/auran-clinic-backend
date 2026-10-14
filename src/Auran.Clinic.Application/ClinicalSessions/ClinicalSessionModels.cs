@@ -20,6 +20,11 @@ public sealed class EndClinicalSessionRequest
     public Guid VisitId { get; init; }
 }
 
+public sealed class CompleteClinicalDocumentationRequest
+{
+    public Guid VisitId { get; init; }
+}
+
 public sealed record ClinicalSessionResponse(
     Guid SessionId,
     Guid VisitId,
@@ -41,6 +46,8 @@ public enum ClinicalSessionOutcome
     SessionAlreadyActive,
     SessionNotFound,
     VisitClosed,
+    DocumentationIncomplete,
+    DocumentationAlreadyCompleted,
     Unauthenticated
 }
 
