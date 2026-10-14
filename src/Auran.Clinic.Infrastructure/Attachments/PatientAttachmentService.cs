@@ -191,17 +191,17 @@ public sealed class PatientAttachmentService(
         return new PatientAttachmentDownload(stream, file.ContentType, file.OriginalName);
     }
 
-    public async Task<bool> DeleteAsync(
+    public async Task<PatientAttachmentDeleteOutcome> DeleteAsync(
         Guid attachmentId,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentActor(out _, out _))
-            return false;
+            return PatientAttachmentDeleteOutcome.NotFound;
 
         var attachment = await dbContext.PatientAttachments
             .SingleOrDefaultAsync(item => item.Id == attachmentId, cancellationToken);
         if (attachment is null)
-            return false;
+            return PatientAttachmentDeleteOutcome.NotFound;
 
         var file = await dbContext.Files
             .SingleOrDefaultAsync(item => item.Id == attachment.FileId, cancellationToken);
@@ -209,12 +209,17 @@ public sealed class PatientAttachmentService(
         // Keep the attachment, file metadata, and audit event in one SQL transaction.
         // The physical blob is only removed after the committed DB state makes it inaccessible.
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        dbContext.PatientAttachments.Remove(attachment);
-
         var isReferencedByClinicalOrder = await dbContext.ClinicalOrderAttachments.AsNoTracking()
             .AnyAsync(item => item.FileId == attachment.FileId, cancellationToken);
 
-        if (file is not null && !isReferencedByClinicalOrder)
+        // The patient attachment is the file's authorized download anchor.
+        // Removing it while a clinical order still references the file would
+        // strand a clinical record that can no longer be downloaded.
+        if (isReferencedByClinicalOrder)
+            return PatientAttachmentDeleteOutcome.ReferencedByClinicalOrder;
+
+        dbContext.PatientAttachments.Remove(attachment);
+        if (file is not null)
             dbContext.Files.Remove(file);
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -233,10 +238,10 @@ public sealed class PatientAttachmentService(
 
         // Storage is not enlisted in the database transaction. Delete bytes only
         // after the metadata/audit commit to avoid dangling database references.
-        if (file is not null && !isReferencedByClinicalOrder)
+        if (file is not null)
             await fileStorage.DeleteAsync(file.StorageKey, cancellationToken);
 
-        return true;
+        return PatientAttachmentDeleteOutcome.Deleted;
     }
 
     private static bool HasValidFileSignature(MemoryStream content, string contentType)

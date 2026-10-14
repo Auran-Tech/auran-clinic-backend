@@ -139,7 +139,7 @@ public sealed class PatientAttachmentsController(
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Files.Upload)]
     [SwaggerOperation(
         Summary = "Delete a patient attachment",
-        Description = "Deletes the patient attachment link. The stored file is deleted only when no clinical-order reference remains.",
+        Description = "Deletes a patient attachment and stored file only when no clinical order references it; otherwise returns 409.",
         OperationId = "PatientAttachments_Delete",
         Tags = new[] { "Files", "Patients" })]
     public async Task<ActionResult<BaseResponse>> Delete(
@@ -155,20 +155,25 @@ public sealed class PatientAttachmentsController(
             });
         }
 
-        var deleted = await attachmentService.DeleteAsync(request.AttachmentId, cancellationToken);
-        if (!deleted)
+        var outcome = await attachmentService.DeleteAsync(request.AttachmentId, cancellationToken);
+        return outcome switch
         {
-            return NotFound(new BaseResponse
+            PatientAttachmentDeleteOutcome.Deleted => Ok(new BaseResponse
+            {
+                Status = true,
+                Message = "Attachment deleted."
+            }),
+            PatientAttachmentDeleteOutcome.ReferencedByClinicalOrder => Conflict(new BaseResponse
+            {
+                Status = false,
+                Message = "Unlink the file from its clinical orders before deleting it.",
+                Error = "attachment_in_use"
+            }),
+            _ => NotFound(new BaseResponse
             {
                 Status = false,
                 Message = "Attachment not found."
-            });
-        }
-
-        return Ok(new BaseResponse
-        {
-            Status = true,
-            Message = "Attachment deleted."
-        });
+            })
+        };
     }
 }

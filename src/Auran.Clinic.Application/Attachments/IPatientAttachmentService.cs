@@ -20,7 +20,7 @@ public interface IPatientAttachmentService
         Guid fileId,
         CancellationToken cancellationToken = default);
 
-    Task<bool> DeleteAsync(
+    Task<PatientAttachmentDeleteOutcome> DeleteAsync(
         Guid attachmentId,
         CancellationToken cancellationToken = default);
 }

@@ -216,6 +216,16 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.False(await db.ClinicalOrders.AsNoTracking()
             .AnyAsync(order => order.VisitId == closedVisitId));
 
+        // A file still linked into a clinical order must remain reachable through
+        // its owning patient attachment and cannot be deleted independently.
+        var referencedPatientAttachmentId = Guid.NewGuid();
+        db.PatientAttachments.Add(new PatientAttachment
+        {
+            Id = referencedPatientAttachmentId, ClinicId = clinicA,
+            PatientId = patientA, FileId = fileA
+        });
+        await db.SaveChangesAsync();
+
         // Saving text/structured content must never drop preexisting File/Image
         // sections and the linked patient attachment.
         var orderId = Guid.NewGuid();
@@ -259,6 +269,26 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.True(await db.ClinicalOrderAttachments.AsNoTracking()
             .AnyAsync(link => link.Id == fileLinkId &&
                 link.ClinicalOrderSectionId == fileSectionId && link.FileId == fileA));
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload"));
+        using (var deleteLinkedRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/patient-attachments")
+        {
+            Content = JsonContent.Create(new { attachmentId = referencedPatientAttachmentId })
+        })
+        using (var blockedDelete = await client.SendAsync(deleteLinkedRequest))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, blockedDelete.StatusCode);
+            Assert.Contains("attachment_in_use", await blockedDelete.Content.ReadAsStringAsync());
+        }
+        Assert.True(await db.PatientAttachments.AsNoTracking()
+            .AnyAsync(attachment => attachment.Id == referencedPatientAttachmentId));
+        Assert.True(await db.ClinicalOrderAttachments.AsNoTracking()
+            .AnyAsync(link => link.Id == fileLinkId));
+        Assert.Equal(0, await db.AuditLogs.AsNoTracking().CountAsync(
+            audit => audit.ClinicId == clinicA &&
+                audit.Action == "PatientAttachment.Deleted" &&
+                audit.EntityId == referencedPatientAttachmentId.ToString()));
 
         // Exercise real local storage and database lifecycle for an authorized patient.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(

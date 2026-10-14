@@ -25,6 +25,13 @@ public enum PatientAttachmentOutcome
     Unauthenticated
 }
 
+public enum PatientAttachmentDeleteOutcome
+{
+    Deleted,
+    NotFound,
+    ReferencedByClinicalOrder
+}
+
 public sealed record PatientAttachmentResult(
     PatientAttachmentOutcome Outcome,
     PatientAttachmentResponse? Attachment = null,
