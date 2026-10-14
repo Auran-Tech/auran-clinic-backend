@@ -125,8 +125,15 @@ public sealed class ClinicalOrderService(
                 order.UpdatedDate = now;
                 order.UpdatedByUserId = userId;
 
+                // This endpoint replaces only editable Text/Structured sections.
+                // Image/File sections and their clinical-order attachment links are
+                // managed independently and must survive a text/order save.
                 var oldSections = await dbContext.ClinicalOrderSections
-                    .Where(section => section.ClinicalOrderId == order.Id)
+                    .Where(section => section.ClinicalOrderId == order.Id &&
+                        dbContext.ClinicalOrderSectionDefinitions.Any(definition =>
+                            definition.Id == section.SectionDefinitionId &&
+                            (definition.SectionType == ClinicalOrderSectionType.Text ||
+                             definition.SectionType == ClinicalOrderSectionType.Structured)))
                     .ToListAsync(cancellationToken);
 
                 if (oldSections.Count > 0)
