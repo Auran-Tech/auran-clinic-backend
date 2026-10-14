@@ -39,6 +39,7 @@ public sealed class VisitService(
             return new VisitStartResult(VisitStartOutcome.ActiveVisitExists);
 
         var initialStatus = await dbContext.WorkflowStatuses.AsNoTracking()
+            .Where(status => !status.IsSystemFinal)
             .OrderBy(status => status.SortOrder)
             .ThenBy(status => status.Name)
             .FirstOrDefaultAsync(cancellationToken);
