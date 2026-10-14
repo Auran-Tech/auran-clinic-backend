@@ -58,6 +58,9 @@ public sealed class ClinicalOrderService(
         if (visit is null)
             return new ClinicalOrderResult(ClinicalOrderOutcome.VisitNotFound);
 
+        if (visit.Status != VisitStatus.Open)
+            return new ClinicalOrderResult(ClinicalOrderOutcome.VisitClosed);
+
         if (visit.DoctorId != userId && !currentUserContext.IsSuperUser)
             return new ClinicalOrderResult(ClinicalOrderOutcome.Forbidden);
 

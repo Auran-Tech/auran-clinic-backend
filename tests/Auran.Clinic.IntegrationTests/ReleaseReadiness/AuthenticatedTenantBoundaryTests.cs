@@ -196,6 +196,26 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             new { visitId = visitB, fileId = Guid.NewGuid(), sectionDefinitionId = Guid.NewGuid() });
         Assert.Equal(HttpStatusCode.NotFound, crossTenantOrderAttachmentWrite.StatusCode);
 
+        // Historical clinical orders must not be rewritten after the visit exits.
+        var closedVisitId = Guid.NewGuid();
+        db.Visits.Add(new Visit
+        {
+            Id = closedVisitId, ClinicId = clinicA, PatientId = patientA,
+            DoctorId = userId, EntryAtUtc = DateTime.UtcNow,
+            Status = Auran.Clinic.Domain.Enums.VisitStatus.Completed
+        });
+        await db.SaveChangesAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Visit_Edit"));
+        using (var closedOrder = await client.PutAsJsonAsync(
+            "/api/clinical-orders", new { visitId = closedVisitId, sections = Array.Empty<object>() }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, closedOrder.StatusCode);
+            Assert.Contains("visit_closed", await closedOrder.Content.ReadAsStringAsync());
+        }
+        Assert.False(await db.ClinicalOrders.AsNoTracking()
+            .AnyAsync(order => order.VisitId == closedVisitId));
+
         // Exercise real local storage and database lifecycle for an authorized patient.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload", "Files_View"));
