@@ -30,7 +30,16 @@ public sealed class LocalFileStorageService : IFileStorageService
         string contentType,
         CancellationToken cancellationToken = default)
     {
-        var extension = Path.GetExtension(Path.GetFileName(originalName));
+        // Storage names must not inherit attacker-controlled filename extensions.
+        // Only validated, supported MIME types are persisted by the attachment API.
+        var extension = contentType.ToLowerInvariant() switch
+        {
+            "application/pdf" => ".pdf",
+            "image/jpeg" => ".jpg",
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            _ => ".bin"
+        };
         var storedName = $"{Guid.NewGuid():N}{extension}";
         var dateFolder = DateTime.UtcNow.ToString("yyyy/MM");
         var relativeKey = Path.Combine(dateFolder, storedName).Replace(Path.DirectorySeparatorChar, '/');
