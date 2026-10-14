@@ -39,13 +39,29 @@ jobs:
         shell: bash
         run: |
           bash -n scripts/production-preflight.sh
-          if ASPNETCORE_ENVIRONMENT=Production Jwt__SigningKey=short \
-             FileStorage__RootPath=/srv/auran/uploads Cors__AllowedOrigins__0=https://clinic.example.invalid \
+          for unsafe_origin in http://clinic.example.invalid 'https://'; do
+            if ASPNETCORE_ENVIRONMENT=Production \
+               ConnectionStrings__DefaultConnection='Server=sql.internal;Database=AuranClinic;Encrypt=True;TrustServerCertificate=False' \
+               Jwt__SigningKey='CI_Preflight_Safe_Test_Secret_Value_123456' \
+               FileStorage__RootPath=/srv/auran/uploads \
+               Cors__AllowedOrigins__0="$unsafe_origin" \
+               bash scripts/production-preflight.sh; then
+              echo 'Preflight accepted an insecure origin'
+              exit 1
+            fi
+          done
+          if ASPNETCORE_ENVIRONMENT=Production \
+             ConnectionStrings__DefaultConnection='Server=sql.internal;Database=AuranClinic;Encrypt=False;TrustServerCertificate=True' \
+             Jwt__SigningKey='CI_Preflight_Safe_Test_Secret_Value_123456' \
+             FileStorage__RootPath=/srv/auran/uploads \
+             Cors__AllowedOrigins__0=https://clinic.example.invalid \
              bash scripts/production-preflight.sh; then
-            echo "Preflight must fail when the signing key is unsafe"
+            echo 'Preflight accepted insecure SQL transport'
             exit 1
           fi
           ASPNETCORE_ENVIRONMENT=Production \
+          ConnectionStrings__DefaultConnection='Server=sql.internal;Database=AuranClinic;Encrypt=True;TrustServerCertificate=False' \
+          Jwt__SigningKey='CI_Preflight_Safe_Test_Secret_Value_123456' \
           FileStorage__RootPath=/srv/auran/uploads \
           Cors__AllowedOrigins__0=https://clinic.example.invalid \
           bash scripts/production-preflight.sh

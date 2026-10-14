@@ -17,8 +17,20 @@ check() {
 [[ "${ASPNETCORE_ENVIRONMENT:-}" == "Production" ]] && env_ok=1 || env_ok=0
 check "$env_ok" 'Production ASP.NET environment'
 
-[[ -n "${ConnectionStrings__DefaultConnection:-}" ]] && db_ok=1 || db_ok=0
+sql_connection="${ConnectionStrings__DefaultConnection:-}"
+[[ -n "$sql_connection" ]] && db_ok=1 || db_ok=0
 check "$db_ok" 'SQL connection string injected by secret store'
+
+# Keep connection strings out of logs. A valid encrypted SQL connection must
+# validate its server certificate, not silently trust a self-signed endpoint.
+normalized_sql="${sql_connection,,}"
+if [[ "$normalized_sql" =~ (^|\;)encrypt=(true|yes|mandatory|strict)(\;|$) ]] &&
+   [[ "$normalized_sql" =~ (^|\;)trustservercertificate=(false|no)(\;|$) ]]; then
+  sql_transport_ok=1
+else
+  sql_transport_ok=0
+fi
+check "$sql_transport_ok" 'SQL transport encrypts and validates certificate'
 
 signing_key="${Jwt__SigningKey:-}"
 [[ ${#signing_key} -ge 32 ]] && jwt_ok=1 || jwt_ok=0
@@ -39,8 +51,9 @@ check "$storage_ok" 'Absolute, explicitly configured file storage path'
 [[ "${FileStorage__OrphanCleanupEnabled:-false}" != "true" ]] && orphan_ok=1 || orphan_ok=0
 check "$orphan_ok" 'Heuristic orphan cleanup remains disabled unless separately approved'
 
-[[ -n "${Cors__AllowedOrigins__0:-}" ]] && cors_ok=1 || cors_ok=0
-check "$cors_ok" 'Explicit primary CORS allowed origin'
+cors_origin="${Cors__AllowedOrigins__0:-}"
+[[ "$cors_origin" =~ ^https://[^/[:space:]]+(/)?$ ]] && cors_ok=1 || cors_ok=0
+check "$cors_ok" 'Primary CORS origin must be explicit HTTPS'
 
 if [[ "$failed" -ne 0 ]]; then
   echo 'Release promotion BLOCKED: configuration preflight failed.' >&2
