@@ -188,7 +188,10 @@ public static class DependencyInjection
         services.AddScoped<IClinicalFieldConfigurationService, ClinicalFieldConfigurationService>();
         services.Configure<FileStorageOptions>(
             configuration.GetSection(FileStorageOptions.SectionName));
-        services.AddSingleton<IFileStorageService, LocalFileStorageService>();
+        services.AddSingleton<LocalFileStorageService>();
+        services.AddSingleton<IFileStorageService>(provider =>
+            provider.GetRequiredService<LocalFileStorageService>());
+        services.AddHostedService<LocalOrphanFileReconciliationService>();
         services.AddScoped<IPatientAttachmentService, PatientAttachmentService>();
         services.AddScoped<IPendingDocumentationService, PendingDocumentationService>();
         services.AddScoped<IFollowUpService, FollowUpService>();
