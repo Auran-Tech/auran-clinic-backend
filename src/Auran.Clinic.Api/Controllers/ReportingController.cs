@@ -65,6 +65,7 @@ public sealed class ReportingController(
     }
 
     [HttpGet("visits/export/xlsx")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.Export)]
     [SwaggerOperation(
         Summary = "Export visit report as Excel XLSX",
