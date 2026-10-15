@@ -538,6 +538,29 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             Assert.Equal(HttpStatusCode.Forbidden, deniedRead.StatusCode);
         }
 
+        // XLSX export requires BOTH Reports_View and Reports_Export.
+        foreach (var insufficientPermission in new[] { "Reports_View", "Reports_Export", "Patient_View" })
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", CreateToken(configuration, userId, clinicA, sessionId, insufficientPermission));
+            using var deniedXlsx = await client.GetAsync("/api/reporting/visits/export/xlsx");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedXlsx.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Reports_View", "Reports_Export"));
+        using (var authorizedXlsx = await client.GetAsync("/api/reporting/visits/export/xlsx"))
+        {
+            Assert.Equal(HttpStatusCode.OK, authorizedXlsx.StatusCode);
+            Assert.Equal(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                authorizedXlsx.Content.Headers.ContentType?.MediaType);
+            var bytes = await authorizedXlsx.Content.ReadAsByteArrayAsync();
+            Assert.True(bytes.Length > 4);
+            Assert.Equal((byte)'P', bytes[0]);
+            Assert.Equal((byte)'K', bytes[1]);
+        }
+
         var mutationDenials = new (string Permission, HttpMethod Method, string Path)[]
         {
             ("Visit_View", HttpMethod.Put, "/api/clinical-orders"),
