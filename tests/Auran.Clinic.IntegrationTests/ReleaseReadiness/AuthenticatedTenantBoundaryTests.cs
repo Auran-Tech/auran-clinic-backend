@@ -294,6 +294,53 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
                 audit.Action == "PatientAttachment.Deleted" &&
                 audit.EntityId == referencedPatientAttachmentId.ToString()));
 
+        // Legacy/imported data can contain multiple PatientAttachment rows pointing
+        // to one FileRecord (FileId is not unique in the schema). Reject removing
+        // the file metadata while any of those references survive.
+        var sharedFileId = Guid.NewGuid();
+        var sharedAttachmentId = Guid.NewGuid();
+        var otherSharedAttachmentId = Guid.NewGuid();
+        db.Files.Add(new FileRecord
+        {
+            Id = sharedFileId, ClinicId = clinicA,
+            OriginalName = "shared.pdf", StoredName = "shared.pdf",
+            ContentType = "application/pdf", Size = 6,
+            StorageProvider = "Local",
+            StorageKey = "fixture-shared-" + sharedFileId,
+            UploadedAtUtc = DateTime.UtcNow, UploadedByUserId = userId
+        });
+        db.PatientAttachments.AddRange(
+            new PatientAttachment
+            {
+                Id = sharedAttachmentId, ClinicId = clinicA,
+                PatientId = patientA, FileId = sharedFileId
+            },
+            new PatientAttachment
+            {
+                Id = otherSharedAttachmentId, ClinicId = clinicA,
+                PatientId = patientA, FileId = sharedFileId
+            });
+        await db.SaveChangesAsync();
+
+        using (var sharedDeleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete, "/api/patient-attachments")
+        {
+            Content = JsonContent.Create(new { attachmentId = sharedAttachmentId })
+        })
+        using (var blockedSharedDelete = await client.SendAsync(sharedDeleteRequest))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, blockedSharedDelete.StatusCode);
+            Assert.Contains("attachment_in_use",
+                await blockedSharedDelete.Content.ReadAsStringAsync());
+        }
+        Assert.Equal(2, await db.PatientAttachments.AsNoTracking()
+            .CountAsync(item => item.FileId == sharedFileId));
+        Assert.True(await db.Files.AsNoTracking().AnyAsync(item => item.Id == sharedFileId));
+        Assert.Equal(0, await db.AuditLogs.AsNoTracking().CountAsync(
+            item => item.ClinicId == clinicA &&
+                item.Action == "PatientAttachment.Deleted" &&
+                item.EntityId == sharedAttachmentId.ToString()));
+
         // Exercise real local storage and database lifecycle for an authorized patient.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_Upload", "Files_View"));
