@@ -28,14 +28,23 @@ public sealed class DocumentationPolicyService(
     {
         if (actor.ClinicId is not Guid clinicId || !IsValidSpecialty(specialtyCode))
             return null;
-        var fields = await db.Database.SqlQuery<string>(
-            $"SELECT RequiredFields AS Value FROM dbo.ClinicDocumentationSpecialtyPolicies WHERE ClinicId = {clinicId} AND SpecialtyCode = {specialtyCode}")
-            .SingleOrDefaultAsync(ct);
-        if (fields is null) return null;
-        var version = await db.Database.SqlQuery<int>(
-            $"SELECT Version AS Value FROM dbo.ClinicDocumentationSpecialtyPolicies WHERE ClinicId = {clinicId} AND SpecialtyCode = {specialtyCode}")
-            .SingleAsync(ct);
-        return new DocumentationPolicyResponse(specialtyCode, fields.Split(','), version);
+        // Read policy fields and version in one SQL statement. Two independent
+        // queries can observe different policy revisions during an admin update.
+        var snapshot = await db.Database.SqlQuery<string>(
+            $"""
+            SELECT CONCAT(Version, '|', RequiredFields) AS Value
+            FROM dbo.ClinicDocumentationSpecialtyPolicies
+            WHERE ClinicId = {clinicId} AND SpecialtyCode = {specialtyCode}
+            """).SingleOrDefaultAsync(ct);
+        if (snapshot is null) return null;
+
+        var separator = snapshot.IndexOf('|');
+        if (separator <= 0)
+            throw new InvalidOperationException("Stored clinical documentation policy is malformed.");
+
+        var version = int.Parse(snapshot[..separator], System.Globalization.CultureInfo.InvariantCulture);
+        return new DocumentationPolicyResponse(
+            specialtyCode, snapshot[(separator + 1)..].Split(','), version);
     }
 
     public async Task<DocumentationPolicyResponse> UpdateAsync(string specialtyCode, string[] fields, CancellationToken ct = default)
