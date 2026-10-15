@@ -29,7 +29,8 @@ public enum PatientAttachmentDeleteOutcome
 {
     Deleted,
     NotFound,
-    ReferencedByClinicalOrder
+    ReferencedByClinicalOrder,
+    ReferencedByOtherPatientAttachment
 }
 
 public sealed record PatientAttachmentResult(
