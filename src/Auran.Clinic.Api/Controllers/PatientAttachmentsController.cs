@@ -163,6 +163,12 @@ public sealed class PatientAttachmentsController(
                 Status = true,
                 Message = "Attachment deleted."
             }),
+            PatientAttachmentDeleteOutcome.ReferencedByOtherPatientAttachment => Conflict(new BaseResponse
+            {
+                Status = false,
+                Message = "This stored file is referenced by another patient attachment.",
+                Error = "attachment_in_use"
+            }),
             PatientAttachmentDeleteOutcome.ReferencedByClinicalOrder => Conflict(new BaseResponse
             {
                 Status = false,
