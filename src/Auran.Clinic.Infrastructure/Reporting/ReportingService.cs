@@ -210,6 +210,12 @@ public sealed class ReportingService(
 
     private static string Escape(string? value)
     {
+        return ReportCsvCell.Encode(value);
+    }
+
+    /* Prior escaping implementation retained for historical reference; removed below.
+    private static string Escape_OLD(string? value)
+    {
         var text = value ?? string.Empty;
         var quote = ((char)34).ToString();
 
@@ -219,4 +225,5 @@ public sealed class ReportingService(
         var escaped = text.Replace(quote, quote + quote);
         return quote + escaped + quote;
     }
+    */
 }
