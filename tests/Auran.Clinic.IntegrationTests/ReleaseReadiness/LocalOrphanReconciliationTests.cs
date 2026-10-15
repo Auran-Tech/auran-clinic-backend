@@ -15,6 +15,112 @@ public sealed class LocalOrphanReconciliationTests(WebApplicationFactory<Program
     : IClassFixture<WebApplicationFactory<Program>>
 {
     [Fact]
+    public async Task Durable_outbox_never_removes_a_blob_still_registered_in_SQL()
+    {
+        var storage = factory.Services.GetRequiredService<IFileStorageService>();
+        var jobId = Guid.NewGuid();
+        string? storageKey = null;
+
+        try
+        {
+            await using var input = new MemoryStream("registered data"u8.ToArray());
+            var blob = await storage.SaveAsync(input, "registered.pdf", "application/pdf");
+            storageKey = blob.StorageKey;
+
+            var clinicId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var identityId = Guid.NewGuid().ToString("N");
+            var fileId = Guid.NewGuid();
+
+            await using var scope = factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AuranClinicDbContext>();
+
+            db.Clinics.Add(new Auran.Clinic.Domain.Entities.Clinic
+            {
+                Id = clinicId, Name = "Protected file outbox test",
+                Code = "OF" + clinicId.ToString("N")[..12]
+            });
+            db.Set<ApplicationIdentityUser>().Add(new ApplicationIdentityUser
+            {
+                Id = identityId,
+                UserName = "outbox-" + identityId,
+                NormalizedUserName = "OUTBOX-" + identityId.ToUpperInvariant(),
+                Email = identityId + "@example.invalid",
+                NormalizedEmail = identityId.ToUpperInvariant() + "@EXAMPLE.INVALID",
+                SecurityStamp = Guid.NewGuid().ToString()
+            });
+            db.Users.Add(new User
+            {
+                Id = userId, ClinicId = clinicId, IdentityUserId = identityId,
+                FullName = "Protected file test user", IsActive = true
+            });
+            db.Files.Add(new FileRecord
+            {
+                Id = fileId, ClinicId = clinicId,
+                OriginalName = "registered.pdf", StoredName = blob.StoredName,
+                StorageKey = blob.StorageKey, StorageProvider = "Local",
+                ContentType = "application/pdf", Size = blob.Size,
+                UploadedByUserId = userId, UploadedAtUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO dbo.FileDeletionOutbox
+                    (Id, ClinicId, StorageProvider, StorageKey, NotBeforeUtc)
+                VALUES ({jobId}, {clinicId}, {"Local"}, {blob.StorageKey}, SYSUTCDATETIME())
+                """);
+
+            var worker = new FileDeletionOutboxWorker(
+                factory.Services.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new FileDeletionOutboxOptions { Enabled = false }),
+                NullLogger<FileDeletionOutboxWorker>.Instance);
+
+            Assert.Equal(0, await worker.ProcessBatchAsync());
+            await using (var retained = await storage.OpenReadAsync(blob.StorageKey))
+                Assert.True(retained.CanRead);
+
+            var deferred = await db.Database.SqlQueryRaw<int>(
+                """
+                SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox
+                WHERE Id = @id AND CompletedAtUtc IS NULL
+                    AND AttemptCount >= 1 AND LastError IS NOT NULL
+                    AND NotBeforeUtc > SYSUTCDATETIME()
+                """,
+                new Microsoft.Data.SqlClient.SqlParameter("@id", jobId)).SingleAsync();
+            Assert.Equal(1, deferred);
+
+            db.Files.Remove((await db.Files.SingleAsync(file => file.Id == fileId)));
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE dbo.FileDeletionOutbox
+                SET NotBeforeUtc = DATEADD(second, -1, SYSUTCDATETIME()),
+                    LeaseUntilUtc = NULL
+                WHERE Id = {jobId}
+                """);
+
+            Assert.Equal(1, await worker.ProcessBatchAsync());
+            var completed = await db.Database.SqlQueryRaw<int>(
+                """
+                SELECT COUNT(*) AS Value FROM dbo.FileDeletionOutbox
+                WHERE Id = @id AND CompletedAtUtc IS NOT NULL
+                """,
+                new Microsoft.Data.SqlClient.SqlParameter("@id", jobId)).SingleAsync();
+            Assert.Equal(1, completed);
+
+            await Assert.ThrowsAsync<FileNotFoundException>(async () =>
+            {
+                await using var _ = await storage.OpenReadAsync(blob.StorageKey);
+            });
+        }
+        finally
+        {
+            if (storageKey is not null)
+                await storage.DeleteAsync(storageKey);
+        }
+    }
+
+    [Fact]
     public async Task Durable_outbox_retries_failed_provider_and_eventually_deletes_file()
     {
         var storage = factory.Services.GetRequiredService<IFileStorageService>();
