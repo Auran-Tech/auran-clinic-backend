@@ -116,7 +116,7 @@ public sealed class FileDeletionOutboxWorker(
             await using var cmd = db.Database.GetDbConnection().CreateCommand();
             cmd.CommandText = """
                 ;WITH next_job AS (
-                    SELECT TOP (1) * FROM dbo.FileDeletionOutbox WITH (ROWLOCK, READPAST, UPDLOCK)
+                    SELECT TOP (1) * FROM dbo.FileDeletionOutbox WITH (ROWLOCK, READPAST, UPDLOCK, READCOMMITTEDLOCK)
                     WHERE CompletedAtUtc IS NULL
                       AND NotBeforeUtc <= SYSUTCDATETIME()
                       AND (LeaseUntilUtc IS NULL OR LeaseUntilUtc < SYSUTCDATETIME())
