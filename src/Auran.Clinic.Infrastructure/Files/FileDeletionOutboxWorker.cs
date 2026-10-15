@@ -107,6 +107,8 @@ public sealed class FileDeletionOutboxWorker(
         return processed;
     }
 
+    // A locking read serializes claims, even under database snapshot settings.
+    // Do not use READPAST: it is rejected in SNAPSHOT-isolated transactions.
     private static async Task<(Guid Id, string Key, string Provider, int Attempts)?> ClaimAsync(
         AuranClinicDbContext db, CancellationToken ct)
     {
@@ -116,7 +118,7 @@ public sealed class FileDeletionOutboxWorker(
             await using var cmd = db.Database.GetDbConnection().CreateCommand();
             cmd.CommandText = """
                 ;WITH next_job AS (
-                    SELECT TOP (1) * FROM dbo.FileDeletionOutbox WITH (ROWLOCK, READPAST, UPDLOCK, READCOMMITTEDLOCK)
+                    SELECT TOP (1) * FROM dbo.FileDeletionOutbox WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
                     WHERE CompletedAtUtc IS NULL
                       AND NotBeforeUtc <= SYSUTCDATETIME()
                       AND (LeaseUntilUtc IS NULL OR LeaseUntilUtc < SYSUTCDATETIME())
