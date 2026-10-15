@@ -213,17 +213,4 @@ public sealed class ReportingService(
         return ReportCsvCell.Encode(value);
     }
 
-    /* Prior escaping implementation retained for historical reference; removed below.
-    private static string Escape_OLD(string? value)
-    {
-        var text = value ?? string.Empty;
-        var quote = ((char)34).ToString();
-
-        if (!text.Contains(',') && !text.Contains((char)34) && !text.Contains('\n') && !text.Contains('\r'))
-            return text;
-
-        var escaped = text.Replace(quote, quote + quote);
-        return quote + escaped + quote;
-    }
-    */
 }
