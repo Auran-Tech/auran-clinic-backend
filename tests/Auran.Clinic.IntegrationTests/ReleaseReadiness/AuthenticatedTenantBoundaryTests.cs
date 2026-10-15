@@ -411,11 +411,30 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Equal(Auran.Clinic.Domain.Enums.DocumentationStatus.Draft,
             (await db.Visits.AsNoTracking().SingleAsync(v => v.Id == visitA)).DocumentationStatus);
 
+        Assert.False(await db.AuditLogs.AsNoTracking()
+            .AnyAsync(log => log.Action == "ClinicalDocumentation.Completed" &&
+                log.ClinicId == clinicA && log.EntityId == visitA.ToString()));
+
         using (var completedPolicy = await client.PutAsJsonAsync(
             "/api/pending-documentation/complete",
             new { visitId = visitA, chiefComplaint = "Patient complaint recorded",
                   diagnosis = "Clinician-entered assessment" }))
             Assert.Equal(HttpStatusCode.OK, completedPolicy.StatusCode);
+
+        var completionAuditJson = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.Action == "ClinicalDocumentation.Completed" &&
+                log.ClinicId == clinicA && log.EntityId == visitA.ToString())
+            .Select(log => log.MetadataJson)
+            .SingleAsync();
+        Assert.NotNull(completionAuditJson);
+        using (var policyAudit = JsonDocument.Parse(completionAuditJson))
+        {
+            Assert.Equal(1, policyAudit.RootElement
+                .GetProperty("documentationPolicyVersion").GetInt32());
+            Assert.Equal("GENERAL", policyAudit.RootElement
+                .GetProperty("specialtyCode").GetString());
+            Assert.DoesNotContain("Clinician-entered assessment", completionAuditJson);
+        }
 
         // Explicit negative permission matrix: permission for one clinical
         // capability must not transitively grant unrelated reads or writes.
