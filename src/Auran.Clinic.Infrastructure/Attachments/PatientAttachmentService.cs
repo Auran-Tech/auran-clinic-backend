@@ -218,6 +218,14 @@ public sealed class PatientAttachmentService(
         if (isReferencedByClinicalOrder)
             return PatientAttachmentDeleteOutcome.ReferencedByClinicalOrder;
 
+        // FileRecord is not unique per PatientAttachment in the existing schema.
+        // Prevent removing its metadata or scheduling blob deletion while another
+        // patient attachment still points to the same file.
+        var isReferencedByAnotherPatientAttachment = await dbContext.PatientAttachments.AsNoTracking()
+            .AnyAsync(item => item.FileId == attachment.FileId && item.Id != attachment.Id, cancellationToken);
+        if (isReferencedByAnotherPatientAttachment)
+            return PatientAttachmentDeleteOutcome.ReferencedByOtherPatientAttachment;
+
         dbContext.PatientAttachments.Remove(attachment);
         if (file is not null)
             dbContext.Files.Remove(file);
