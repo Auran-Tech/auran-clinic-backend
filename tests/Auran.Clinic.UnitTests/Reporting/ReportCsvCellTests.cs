@@ -15,7 +15,7 @@ public sealed class ReportCsvCellTests
     public void Formula_like_user_strings_are_prefix_neutralized(string value)
     {
         var encoded = ReportCsvCell.Encode(value);
-        Assert.True(encoded.StartsWith("'") || encoded.StartsWith("\\"'"), "Neutralized CSV cell must start with a text marker.");
+        Assert.True(encoded.StartsWith("'") || encoded.StartsWith("\"'"), "Neutralized CSV cell must start with a text marker.");
         Assert.Contains(value[0].ToString(), encoded);
     }
 
