@@ -1,6 +1,7 @@
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Application.Reporting;
+using Auran.Clinic.Infrastructure.Reporting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -61,6 +62,32 @@ public sealed class ReportingController(
             Status = true,
             Data = data
         });
+    }
+
+    [HttpGet("visits/export/xlsx")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.Export)]
+    [SwaggerOperation(
+        Summary = "Export visit report as Excel XLSX",
+        Description = "Exports tenant-scoped filtered visit records as a true OpenXML workbook, with safe inline text cells and typed UTC dates.",
+        OperationId = "Reporting_ExportVisitsXlsx",
+        Tags = new[] { "Reporting" })]
+    public async Task<IActionResult> ExportVisitsXlsx(
+        [FromQuery] VisitReportQuery query,
+        CancellationToken cancellationToken)
+    {
+        var validation = await visitReportValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+
+        var report = await reportingService.GetVisitReportAsync(query, cancellationToken);
+        var from = report.FromDate?.ToString("yyyyMMdd") ?? "all";
+        var to = report.ToDate?.ToString("yyyyMMdd") ?? "all";
+        var bytes = VisitReportXlsxWriter.Create(report);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"auran-visits-{from}-{to}.xlsx");
     }
 
     [HttpGet("visits/export")]
