@@ -98,18 +98,25 @@ public sealed class PendingDocumentationService(
 
         // Resolve the clinic-owned policy through the visit's assigned doctor.
         // Unconfigured specialties retain the legacy at-least-one-field validation.
-        var requiredFields = await dbContext.Database.SqlQuery<string>(
+        var policySnapshot = await dbContext.Database.SqlQuery<string>(
             $"""
-            SELECT p.RequiredFields AS Value
+            SELECT CONCAT(p.Version, '|', d.SpecialtyCode, '|', p.RequiredFields) AS Value
             FROM dbo.DoctorDocumentationSpecialties AS d
             INNER JOIN dbo.ClinicDocumentationSpecialtyPolicies AS p
               ON p.ClinicId = d.ClinicId AND p.SpecialtyCode = d.SpecialtyCode
             WHERE d.ClinicId = {clinicId} AND d.DoctorId = {visit.DoctorId}
             """).SingleOrDefaultAsync(cancellationToken);
 
-        if (requiredFields is not null)
+        int? appliedPolicyVersion = null;
+        string? appliedSpecialtyCode = null;
+        if (policySnapshot is not null)
         {
-            var missing = requiredFields.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            // Read version, specialty and required fields in a single SQL statement
+            // so the audit describes the exact policy used by this finalization.
+            var parts = policySnapshot.Split('|', 3);
+            appliedPolicyVersion = int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture);
+            appliedSpecialtyCode = parts[1];
+            var missing = parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Where(field => field switch
                 {
                     "ChiefComplaint" => string.IsNullOrWhiteSpace(request.ChiefComplaint),
@@ -144,7 +151,9 @@ public sealed class PendingDocumentationService(
             new Dictionary<string, object?>
             {
                 ["patientId"] = visit.PatientId,
-                ["doctorId"] = visit.DoctorId
+                ["doctorId"] = visit.DoctorId,
+                ["specialtyCode"] = appliedSpecialtyCode,
+                ["documentationPolicyVersion"] = appliedPolicyVersion
             },
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
