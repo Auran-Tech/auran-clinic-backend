@@ -428,6 +428,19 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Files_View"));
+        using (var uploadWithoutPermission = new MultipartFormDataContent())
+        {
+            uploadWithoutPermission.Add(new StringContent(patientA.ToString()), "PatientId");
+            using var fileWithoutPermission = new ByteArrayContent("%PDF-1"u8.ToArray());
+            fileWithoutPermission.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            uploadWithoutPermission.Add(fileWithoutPermission, "File", "not-permitted.pdf");
+            using var forbiddenUpload = await client.PostAsync(
+                "/api/patient-attachments", uploadWithoutPermission);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenUpload.StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
