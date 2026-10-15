@@ -483,6 +483,41 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             Assert.DoesNotContain("Clinician-entered assessment", completionAuditJson);
         }
 
+        // Read back a revision's field list and version together. A later policy
+        // update must return the new matching revision without stale fields.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Settings_View"));
+        using (var policyRead = await client.GetAsync(
+            "/api/documentation-policies?specialtyCode=GENERAL"))
+        {
+            Assert.Equal(HttpStatusCode.OK, policyRead.StatusCode);
+            using var body = JsonDocument.Parse(await policyRead.Content.ReadAsStringAsync());
+            Assert.Equal(1, body.RootElement.GetProperty("data").GetProperty("version").GetInt32());
+            var fields = body.RootElement.GetProperty("data").GetProperty("requiredFields")
+                .EnumerateArray().Select(item => item.GetString()).ToArray();
+            Assert.Equal(new[] { "ChiefComplaint", "Diagnosis" }, fields);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Settings_Manage"));
+        using (var changedPolicy = await client.PutAsJsonAsync(
+            "/api/documentation-policies",
+            new { specialtyCode = "GENERAL", requiredFields = new[] { "Examination" } }))
+            Assert.Equal(HttpStatusCode.OK, changedPolicy.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Settings_View"));
+        using (var policyRead = await client.GetAsync(
+            "/api/documentation-policies?specialtyCode=GENERAL"))
+        {
+            Assert.Equal(HttpStatusCode.OK, policyRead.StatusCode);
+            using var body = JsonDocument.Parse(await policyRead.Content.ReadAsStringAsync());
+            Assert.Equal(2, body.RootElement.GetProperty("data").GetProperty("version").GetInt32());
+            var fields = body.RootElement.GetProperty("data").GetProperty("requiredFields")
+                .EnumerateArray().Select(item => item.GetString()).ToArray();
+            Assert.Equal(new[] { "Examination" }, fields);
+        }
+
         // Explicit negative permission matrix: permission for one clinical
         // capability must not transitively grant unrelated reads or writes.
         var readDenials = new (string Permission, string Path)[]
