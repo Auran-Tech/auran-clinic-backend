@@ -545,6 +545,8 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
                 "Bearer", CreateToken(configuration, userId, clinicA, sessionId, insufficientPermission));
             using var deniedXlsx = await client.GetAsync("/api/reporting/visits/export/xlsx");
             Assert.Equal(HttpStatusCode.Forbidden, deniedXlsx.StatusCode);
+            using var deniedCsv = await client.GetAsync("/api/reporting/visits/export");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedCsv.StatusCode);
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
@@ -559,6 +561,12 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             Assert.True(bytes.Length > 4);
             Assert.Equal((byte)'P', bytes[0]);
             Assert.Equal((byte)'K', bytes[1]);
+        }
+
+        using (var authorizedCsv = await client.GetAsync("/api/reporting/visits/export"))
+        {
+            Assert.Equal(HttpStatusCode.OK, authorizedCsv.StatusCode);
+            Assert.Equal("text/csv", authorizedCsv.Content.Headers.ContentType?.MediaType);
         }
 
         var mutationDenials = new (string Permission, HttpMethod Method, string Path)[]

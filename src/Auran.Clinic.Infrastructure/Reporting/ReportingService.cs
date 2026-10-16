@@ -112,7 +112,10 @@ public sealed class ReportingService(
                 visit.ExitAtUtc,
                 visit.Diagnosis,
                 visit.TreatmentPlan))
+            .Take(VisitReportSizePolicy.MaximumRows + 1)
             .ToListAsync(cancellationToken);
+
+        VisitReportSizePolicy.EnsureWithinLimit(rows.Count);
 
         return new VisitReportResponse(
             query.FromDate,
