@@ -528,7 +528,8 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             ("Visit_View", $"/api/patient-attachments?patientId={patientA}"),
             ("Visit_View", "/api/follow-ups?bucket=All"),
             ("Files_View", $"/api/clinical-sessions/active?visitId={visitA}"),
-            ("Patient_View", "/api/documentation-policies?specialtyCode=GENERAL")
+            ("Patient_View", "/api/documentation-policies?specialtyCode=GENERAL"),
+            ("Patient_View", "/api/reporting/patients")
         };
         foreach (var (permission, path) in readDenials)
         {
@@ -567,6 +568,21 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         {
             Assert.Equal(HttpStatusCode.OK, authorizedCsv.StatusCode);
             Assert.Equal("text/csv", authorizedCsv.Content.Headers.ContentType?.MediaType);
+        }
+
+        foreach (var insufficientPermission in new[] { "Patient_View", "Reports_View", "Reports_Export" })
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", CreateToken(configuration, userId, clinicA, sessionId, insufficientPermission));
+            using var deniedPatientExport = await client.GetAsync("/api/reporting/patients/export");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedPatientExport.StatusCode);
+        }
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Reports_View", "Reports_Export"));
+        using (var patientCsv = await client.GetAsync("/api/reporting/patients/export"))
+        {
+            Assert.Equal(HttpStatusCode.OK, patientCsv.StatusCode);
+            Assert.Equal("text/csv", patientCsv.Content.Headers.ContentType?.MediaType);
         }
 
         var mutationDenials = new (string Permission, HttpMethod Method, string Path)[]
