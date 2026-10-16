@@ -56,12 +56,20 @@ public sealed class ReportingController(
             });
         }
 
-        var data = await reportingService.GetVisitReportAsync(query, cancellationToken);
-        return Ok(new BaseResponse<VisitReportResponse>
+        try
         {
-            Status = true,
-            Data = data
-        });
+            var data = await reportingService.GetVisitReportAsync(query, cancellationToken);
+            return Ok(new BaseResponse<VisitReportResponse>
+            {
+                Status = true,
+                Data = data
+            });
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
     }
 
     [HttpGet("visits/export/xlsx")]
@@ -80,14 +88,22 @@ public sealed class ReportingController(
         if (!validation.IsValid)
             return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
 
-        var report = await reportingService.GetVisitReportAsync(query, cancellationToken);
-        var from = report.FromDate?.ToString("yyyyMMdd") ?? "all";
-        var to = report.ToDate?.ToString("yyyyMMdd") ?? "all";
-        var bytes = VisitReportXlsxWriter.Create(report);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"auran-visits-{from}-{to}.xlsx");
+        try
+        {
+            var report = await reportingService.GetVisitReportAsync(query, cancellationToken);
+            var from = report.FromDate?.ToString("yyyyMMdd") ?? "all";
+            var to = report.ToDate?.ToString("yyyyMMdd") ?? "all";
+            var bytes = VisitReportXlsxWriter.Create(report);
+            return File(
+                bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"auran-visits-{from}-{to}.xlsx");
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
     }
 
     [HttpGet("visits/export")]
@@ -106,7 +122,15 @@ public sealed class ReportingController(
         if (!validation.IsValid)
             return BadRequest();
 
-        var export = await reportingService.ExportVisitReportCsvAsync(query, cancellationToken);
-        return File(export.Content, export.ContentType, export.FileName);
+        try
+        {
+            var export = await reportingService.ExportVisitReportCsvAsync(query, cancellationToken);
+            return File(export.Content, export.ContentType, export.FileName);
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
     }
 }
