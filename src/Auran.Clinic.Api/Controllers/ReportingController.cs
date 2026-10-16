@@ -107,6 +107,7 @@ public sealed class ReportingController(
     }
 
     [HttpGet("visits/export")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.Export)]
     [SwaggerOperation(
         Summary = "Export visit report as CSV",
