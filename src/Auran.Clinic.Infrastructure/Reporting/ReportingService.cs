@@ -12,6 +12,69 @@ public sealed class ReportingService(
     AuranClinicDbContext dbContext,
     ICurrentUserContext currentUserContext) : IReportingService
 {
+    public async Task<PatientReportResponse> GetPatientReportAsync(
+        PatientReportQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        // The DbContext applies the clinic/tenant query filter to Patients.
+        var patients = dbContext.Patients.AsNoTracking();
+        if (query.FromDate.HasValue)
+        {
+            var fromUtc = await ConvertLocalStartToUtcAsync(query.FromDate.Value, cancellationToken);
+            patients = patients.Where(patient => patient.CreatedDate >= fromUtc);
+        }
+
+        if (query.ToDate.HasValue)
+        {
+            var exclusiveUtc = await ConvertLocalStartToUtcAsync(query.ToDate.Value.AddDays(1), cancellationToken);
+            patients = patients.Where(patient => patient.CreatedDate < exclusiveUtc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Gender))
+        {
+            var gender = query.Gender.Trim();
+            patients = patients.Where(patient => patient.Gender == gender);
+        }
+
+        var rows = await patients
+            .OrderBy(patient => patient.CreatedDate)
+            .ThenBy(patient => patient.Id)
+            .Select(patient => new PatientReportRowResponse(
+                patient.Id, patient.PatientNumber, patient.FullName, patient.Phone,
+                patient.Gender, patient.DateOfBirth, patient.CreatedDate))
+            .Take(VisitReportSizePolicy.MaximumRows + 1)
+            .ToListAsync(cancellationToken);
+
+        VisitReportSizePolicy.EnsureWithinLimit(rows.Count);
+        return new PatientReportResponse(query.FromDate, query.ToDate, rows.Count, rows);
+    }
+
+    public async Task<ReportExportResponse> ExportPatientReportCsvAsync(
+        PatientReportQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var report = await GetPatientReportAsync(query, cancellationToken);
+        var csv = new StringBuilder();
+        csv.AppendLine("PatientNumber,PatientName,Phone,Gender,DateOfBirth,CreatedAtUtc");
+        foreach (var row in report.Rows)
+        {
+            csv.Append(ReportCsvCell.Encode(row.PatientNumber)).Append(',')
+                .Append(ReportCsvCell.Encode(row.PatientName)).Append(',')
+                .Append(ReportCsvCell.Encode(row.Phone)).Append(',')
+                .Append(ReportCsvCell.Encode(row.Gender)).Append(',')
+                .Append(ReportCsvCell.Encode(row.DateOfBirth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))).Append(',')
+                .Append(ReportCsvCell.Encode(row.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture)))
+                .AppendLine();
+        }
+
+        var from = report.FromDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        var to = report.ToDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        return new ReportExportResponse(
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(csv.ToString()),
+            "text/csv; charset=utf-8",
+            $"auran-patients-{from}-{to}.csv");
+    }
+
     public async Task<DashboardSummaryResponse> GetDashboardAsync(
         CancellationToken cancellationToken = default)
     {
