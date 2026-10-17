@@ -602,6 +602,23 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             Assert.Equal("text/csv", queueCsv.Content.Headers.ContentType?.MediaType);
         }
 
+        foreach (var insufficientPermission in new[] { "Patient_View", "Reports_View", "Reports_Export" })
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", CreateToken(configuration, userId, clinicA, sessionId, insufficientPermission));
+            using var rejectedDoctorCsv = await client.GetAsync("/api/reporting/doctors/export");
+            Assert.Equal(HttpStatusCode.Forbidden, rejectedDoctorCsv.StatusCode);
+        }
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Reports_View", "Reports_Export"));
+        using (var doctorPreview = await client.GetAsync("/api/reporting/doctors"))
+            Assert.Equal(HttpStatusCode.OK, doctorPreview.StatusCode);
+        using (var doctorCsv = await client.GetAsync("/api/reporting/doctors/export"))
+        {
+            Assert.Equal(HttpStatusCode.OK, doctorCsv.StatusCode);
+            Assert.Equal("text/csv", doctorCsv.Content.Headers.ContentType?.MediaType);
+        }
+
         var mutationDenials = new (string Permission, HttpMethod Method, string Path)[]
         {
             ("Visit_View", HttpMethod.Put, "/api/clinical-orders"),
