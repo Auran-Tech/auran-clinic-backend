@@ -12,6 +12,80 @@ public sealed class ReportingService(
     AuranClinicDbContext dbContext,
     ICurrentUserContext currentUserContext) : IReportingService
 {
+    public async Task<QueueReportResponse> GetQueueReportAsync(
+        QueueReportQuery query, CancellationToken cancellationToken = default)
+    {
+        // Every joined DbSet retains its clinic-scoped EF query filter.
+        var queue = dbContext.QueueEntries.AsNoTracking();
+        if (query.FromDate.HasValue)
+        {
+            var start = await ConvertLocalStartToUtcAsync(query.FromDate.Value, cancellationToken);
+            queue = queue.Where(entry => entry.EntryAtUtc >= start);
+        }
+        if (query.ToDate.HasValue)
+        {
+            var end = await ConvertLocalStartToUtcAsync(query.ToDate.Value.AddDays(1), cancellationToken);
+            queue = queue.Where(entry => entry.EntryAtUtc < end);
+        }
+        if (query.DoctorId.HasValue)
+            queue = queue.Where(entry => entry.DoctorId == query.DoctorId);
+        if (query.WorkflowStatusId.HasValue)
+            queue = queue.Where(entry => entry.WorkflowStatusId == query.WorkflowStatusId);
+
+        var projected = await (
+            from entry in queue
+            join patient in dbContext.Patients.AsNoTracking() on entry.PatientId equals patient.Id
+            join status in dbContext.WorkflowStatuses.AsNoTracking() on entry.WorkflowStatusId equals status.Id
+            join doctor in dbContext.Users.AsNoTracking() on entry.DoctorId equals (Guid?)doctor.Id into doctors
+            from doctor in doctors.DefaultIfEmpty()
+            orderby entry.EntryAtUtc descending, entry.Id
+            select new
+            {
+                entry.Id, entry.PatientId, patient.PatientNumber, PatientName = patient.FullName,
+                entry.DoctorId, DoctorName = doctor == null ? null : doctor.FullName,
+                entry.WorkflowStatusId, StatusCode = status.Code, StatusName = status.Name,
+                entry.EntryAtUtc, entry.ExitAtUtc
+            })
+            .Take(VisitReportSizePolicy.MaximumRows + 1)
+            .ToListAsync(cancellationToken);
+        VisitReportSizePolicy.EnsureWithinLimit(projected.Count);
+
+        var rows = projected.Select(item => new QueueReportRowResponse(
+            item.Id, item.PatientId, item.PatientNumber, item.PatientName,
+            item.DoctorId, item.DoctorName, item.WorkflowStatusId,
+            item.StatusCode, item.StatusName, item.EntryAtUtc, item.ExitAtUtc,
+            item.ExitAtUtc.HasValue
+                ? Math.Max(0, (item.ExitAtUtc.Value - item.EntryAtUtc).TotalMinutes)
+                : null)).ToList();
+
+        return new QueueReportResponse(query.FromDate, query.ToDate, rows.Count, rows);
+    }
+
+    public async Task<ReportExportResponse> ExportQueueReportCsvAsync(
+        QueueReportQuery query, CancellationToken cancellationToken = default)
+    {
+        var report = await GetQueueReportAsync(query, cancellationToken);
+        var csv = new StringBuilder();
+        csv.AppendLine("PatientNumber,PatientName,DoctorName,WorkflowStatus,EntryAtUtc,ExitAtUtc,DurationMinutes");
+        foreach (var row in report.Rows)
+        {
+            csv.Append(ReportCsvCell.Encode(row.PatientNumber)).Append(',')
+                .Append(ReportCsvCell.Encode(row.PatientName)).Append(',')
+                .Append(ReportCsvCell.Encode(row.DoctorName)).Append(',')
+                .Append(ReportCsvCell.Encode(row.WorkflowStatusName)).Append(',')
+                .Append(ReportCsvCell.Encode(row.EntryAtUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+                .Append(ReportCsvCell.Encode(row.ExitAtUtc?.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+                .Append(row.DurationMinutes?.ToString("F2", CultureInfo.InvariantCulture))
+                .AppendLine();
+        }
+        var from = report.FromDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        var to = report.ToDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        return new ReportExportResponse(
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(csv.ToString()),
+            "text/csv; charset=utf-8",
+            $"auran-queue-{from}-{to}.csv");
+    }
+
     public async Task<PatientReportResponse> GetPatientReportAsync(
         PatientReportQuery query,
         CancellationToken cancellationToken = default)
