@@ -12,6 +12,76 @@ public sealed class ReportingService(
     AuranClinicDbContext dbContext,
     ICurrentUserContext currentUserContext) : IReportingService
 {
+    public async Task<DoctorActivityReportResponse> GetDoctorActivityReportAsync(
+        DoctorActivityReportQuery query, CancellationToken cancellationToken = default)
+    {
+        var doctorIds = dbContext.UserRoles.AsNoTracking()
+            .Where(userRole => dbContext.Roles.AsNoTracking()
+                .Any(role => role.Id == userRole.RoleId && role.Code == "DOCTOR"))
+            .Select(userRole => userRole.UserId)
+            .Distinct();
+
+        var doctors = dbContext.Users.AsNoTracking()
+            .Where(user => doctorIds.Contains(user.Id));
+        if (query.DoctorId.HasValue)
+            doctors = doctors.Where(user => user.Id == query.DoctorId.Value);
+
+        var visits = dbContext.Visits.AsNoTracking();
+        if (query.FromDate.HasValue)
+        {
+            var fromUtc = await ConvertLocalStartToUtcAsync(query.FromDate.Value, cancellationToken);
+            visits = visits.Where(visit => visit.EntryAtUtc >= fromUtc);
+        }
+        if (query.ToDate.HasValue)
+        {
+            var toExclusiveUtc = await ConvertLocalStartToUtcAsync(query.ToDate.Value.AddDays(1), cancellationToken);
+            visits = visits.Where(visit => visit.EntryAtUtc < toExclusiveUtc);
+        }
+
+        // Counts are evaluated in SQL and retain the clinic query filters.
+        // Current queue is intentionally a live count, independent of the visit date range.
+        var rows = await doctors
+            .OrderBy(user => user.FullName)
+            .ThenBy(user => user.Id)
+            .Select(user => new DoctorActivityReportRowResponse(
+                user.Id,
+                user.FullName,
+                dbContext.QueueEntries.AsNoTracking().Count(entry => entry.DoctorId == user.Id && entry.ExitAtUtc == null),
+                visits.Count(visit => visit.DoctorId == user.Id),
+                visits.Count(visit => visit.DoctorId == user.Id &&
+                    visit.DocumentationStatus == DocumentationStatus.Completed),
+                visits.Count(visit => visit.DoctorId == user.Id &&
+                    visit.DocumentationStatus != DocumentationStatus.Completed)))
+            .Take(VisitReportSizePolicy.MaximumRows + 1)
+            .ToListAsync(cancellationToken);
+        VisitReportSizePolicy.EnsureWithinLimit(rows.Count);
+
+        return new DoctorActivityReportResponse(query.FromDate, query.ToDate, rows.Count, rows);
+    }
+
+    public async Task<ReportExportResponse> ExportDoctorActivityCsvAsync(
+        DoctorActivityReportQuery query, CancellationToken cancellationToken = default)
+    {
+        var report = await GetDoctorActivityReportAsync(query, cancellationToken);
+        var csv = new StringBuilder();
+        csv.AppendLine("DoctorName,CurrentQueue,TotalVisits,CompletedDocs,PendingDocs");
+        foreach (var row in report.Rows)
+        {
+            csv.Append(ReportCsvCell.Encode(row.DoctorName)).Append(',')
+                .Append(row.CurrentQueue.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(row.TotalVisits.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(row.CompletedDocs.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(row.PendingDocs.ToString(CultureInfo.InvariantCulture))
+                .AppendLine();
+        }
+        var from = report.FromDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        var to = report.ToDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? "all";
+        return new ReportExportResponse(
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(csv.ToString()),
+            "text/csv; charset=utf-8",
+            $"auran-doctors-{from}-{to}.csv");
+    }
+
     public async Task<QueueReportResponse> GetQueueReportAsync(
         QueueReportQuery query, CancellationToken cancellationToken = default)
     {
