@@ -17,8 +17,61 @@ public sealed class ReportingController(
     IReportingService reportingService,
     IValidator<VisitReportQuery> visitReportValidator,
     IValidator<PatientReportQuery> patientReportValidator,
-    IValidator<QueueReportQuery> queueReportValidator) : ControllerBase
+    IValidator<QueueReportQuery> queueReportValidator,
+    IValidator<DoctorActivityReportQuery> doctorActivityReportValidator) : ControllerBase
 {
+    [HttpGet("doctors")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
+    [SwaggerOperation(
+        Summary = "Preview doctor activity",
+        Description = "Returns per-doctor activity counts for clinic-local visit dates, with current queue independent of dates.",
+        OperationId = "Reporting_DoctorActivity",
+        Tags = new[] { "Reporting" })]
+    public async Task<IActionResult> DoctorActivity(
+        [FromQuery] DoctorActivityReportQuery query, CancellationToken cancellationToken)
+    {
+        var validation = await doctorActivityReportValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+        try
+        {
+            var data = await reportingService.GetDoctorActivityReportAsync(query, cancellationToken);
+            return Ok(new BaseResponse<DoctorActivityReportResponse> { Status = true, Data = data });
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
+    }
+
+    [HttpGet("doctors/export")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.Export)]
+    [SwaggerOperation(
+        Summary = "Export doctor activity CSV",
+        Description = "Exports bounded clinic-scoped doctor activity metrics with formula-safe text.",
+        OperationId = "Reporting_ExportDoctorActivityCsv",
+        Tags = new[] { "Reporting" })]
+    [Produces("text/csv")]
+    public async Task<IActionResult> ExportDoctorActivity(
+        [FromQuery] DoctorActivityReportQuery query, CancellationToken cancellationToken)
+    {
+        var validation = await doctorActivityReportValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+        try
+        {
+            var export = await reportingService.ExportDoctorActivityCsvAsync(query, cancellationToken);
+            return File(export.Content, export.ContentType, export.FileName);
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
+    }
+
     [HttpGet("queue")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
     [SwaggerOperation(
