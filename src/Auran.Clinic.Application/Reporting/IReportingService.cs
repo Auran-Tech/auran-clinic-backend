@@ -2,6 +2,12 @@ namespace Auran.Clinic.Application.Reporting;
 
 public interface IReportingService
 {
+    Task<DoctorActivityReportResponse> GetDoctorActivityReportAsync(
+        DoctorActivityReportQuery query, CancellationToken cancellationToken = default);
+
+    Task<ReportExportResponse> ExportDoctorActivityCsvAsync(
+        DoctorActivityReportQuery query, CancellationToken cancellationToken = default);
+
     Task<QueueReportResponse> GetQueueReportAsync(
         QueueReportQuery query, CancellationToken cancellationToken = default);
 
