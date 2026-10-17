@@ -16,8 +16,61 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class ReportingController(
     IReportingService reportingService,
     IValidator<VisitReportQuery> visitReportValidator,
-    IValidator<PatientReportQuery> patientReportValidator) : ControllerBase
+    IValidator<PatientReportQuery> patientReportValidator,
+    IValidator<QueueReportQuery> queueReportValidator) : ControllerBase
 {
+    [HttpGet("queue")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
+    [SwaggerOperation(
+        Summary = "Preview clinic queue report",
+        Description = "Returns tenant-scoped queue entries filtered by clinic-local entry date, doctor and workflow status.",
+        OperationId = "Reporting_Queue",
+        Tags = new[] { "Reporting" })]
+    public async Task<IActionResult> QueueReport(
+        [FromQuery] QueueReportQuery query, CancellationToken cancellationToken)
+    {
+        var validation = await queueReportValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+        try
+        {
+            var result = await reportingService.GetQueueReportAsync(query, cancellationToken);
+            return Ok(new BaseResponse<QueueReportResponse> { Status = true, Data = result });
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
+    }
+
+    [HttpGet("queue/export")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.Export)]
+    [SwaggerOperation(
+        Summary = "Export clinic queue report as CSV",
+        Description = "Uses the same bounded filters as preview and neutralizes spreadsheet formula injection.",
+        OperationId = "Reporting_ExportQueueCsv",
+        Tags = new[] { "Reporting" })]
+    [Produces("text/csv")]
+    public async Task<IActionResult> ExportQueueReport(
+        [FromQuery] QueueReportQuery query, CancellationToken cancellationToken)
+    {
+        var validation = await queueReportValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+        try
+        {
+            var export = await reportingService.ExportQueueReportCsvAsync(query, cancellationToken);
+            return File(export.Content, export.ContentType, export.FileName);
+        }
+        catch (ReportResultTooLargeException exception)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new BaseResponse { Status = false, Error = "report_too_large", Message = exception.Message });
+        }
+    }
+
     [HttpGet("patients")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Reports.View)]
     [SwaggerOperation(
