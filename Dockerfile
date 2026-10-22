@@ -8,6 +8,10 @@ RUN dotnet publish src/Auran.Clinic.Api/Auran.Clinic.Api.csproj \
     --no-restore \
     --output /app/publish
 
+FROM build AS migrate
+RUN dotnet tool restore
+ENTRYPOINT ["dotnet", "ef", "database", "update", "--project", "src/Auran.Clinic.Infrastructure/Auran.Clinic.Infrastructure.csproj", "--startup-project", "src/Auran.Clinic.Api/Auran.Clinic.Api.csproj", "--configuration", "Release", "--no-build"]
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .

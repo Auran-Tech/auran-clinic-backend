@@ -1,30 +1,66 @@
+name: auran-mvp1
+
 services:
+  frontend:
+    build:
+      context: ${AURAN_FRONTEND_PATH:-../auran-clinic-frontend-main}
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:5085/api
+    ports:
+      - "127.0.0.1:4173:80"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "127.0.0.1:5085:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set};TrustServerCertificate=True;
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY must be set}
+      ApiSecurity__LoginPermitLimit: 80
+      Cors__AllowedOrigins__0: http://127.0.0.1:4173
+      Cors__AllowedOrigins__1: http://localhost:4173
+      FileStorage__RootPath: /data/uploads
       PlatformBootstrap__Enabled: ${PLATFORM_BOOTSTRAP_ENABLED:-false}
       PlatformBootstrap__FullName: ${PLATFORM_BOOTSTRAP_FULL_NAME:-}
       PlatformBootstrap__Email: ${PLATFORM_BOOTSTRAP_EMAIL:-}
       PlatformBootstrap__Password: ${PLATFORM_BOOTSTRAP_PASSWORD:-}
       PlatformBootstrap__Phone: ${PLATFORM_BOOTSTRAP_PHONE:-}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - upload-data:/data/uploads
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AuranClinic;User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set};TrustServerCertificate=True;
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY must be set}
+    depends_on:
       sqlserver:
         condition: service_healthy
 
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set}
     ports:
-      - "1433:1433"
+      - "127.0.0.1:14330:1433"
     volumes:
       - sql-data:/var/opt/mssql
     healthcheck:
@@ -36,3 +72,4 @@ services:
 
 volumes:
   sql-data:
+  upload-data:

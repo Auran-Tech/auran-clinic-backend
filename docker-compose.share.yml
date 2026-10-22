@@ -1,0 +1,19 @@
+# Overlay for a temporary public laptop test link.
+# Run with docker-compose.yml; this builds the browser app against its own origin.
+services:
+  frontend:
+    build:
+      args:
+        VITE_API_BASE_URL: /api
+
+  share:
+    image: cloudflare/cloudflared:latest
+    profiles: [share]
+    command:
+      - tunnel
+      - --url
+      - http://frontend:80
+    depends_on:
+      frontend:
+        condition: service_started
+    restart: "no"

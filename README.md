@@ -172,6 +172,28 @@ public class PaginatedResponse<T>
 
 ## Run Locally
 
+### Docker MVP 1 test stack
+
+From this backend directory, with the frontend checkout beside it:
+
+1. Copy `.env.example` to `.env` and replace the SQL, JWT, and one-time Platform bootstrap passwords with strong local values. Set `AURAN_FRONTEND_PATH` if the frontend checkout has a different sibling directory name. `.env` is ignored by Git.
+2. Run `docker compose up -d --build`. Compose starts SQL Server, applies the EF migrations in a one-shot container, then starts the API and the built frontend. The API stores uploads in a separate persistent Docker volume.
+3. Check `docker compose ps`, `http://127.0.0.1:5085/health/ready`, and `http://127.0.0.1:4173/login`. The Platform UI is at `http://127.0.0.1:4173/platform`; use the bootstrap account to create a test clinic and its first Clinic Super User.
+4. After the first Platform account exists, set `PLATFORM_BOOTSTRAP_ENABLED=false` and remove the bootstrap password from `.env`, then run `docker compose up -d` again. Keep test credentials outside Git.
+5. For browser regression tests from the frontend directory, set `E2E_API_BASE_URL=http://127.0.0.1:5085/api`, `E2E_REUSE_EXISTING_SERVER=true`, `PlatformBootstrap__Email`, and `PlatformBootstrap__Password` to the local test account values, then run `npx playwright test --workers=4`. The live tests create synthetic clinics and records, so use an isolated test stack rather than a clinic used for manual testing.
+
+The frontend Nginx image supports an internal `/api` proxy; this local Compose build points the browser directly at `127.0.0.1:5085` for the existing live-stack tests. Host ports are bound to localhost: frontend `4173`, API `5085`, SQL Server `14330`. `docker compose down` stops the stack and retains SQL and uploads; `docker compose down -v` removes both volumes and all test data. Use synthetic data only. This is a local Development setup, not a production deployment.
+
+### Share the running local MVP with developers
+
+Start the Docker MVP stack above first. Keep Docker Desktop and this laptop running. From this backend directory in PowerShell, start a public temporary link:
+
+```powershell
+.\scripts\start-local-share.ps1
+```
+
+The script rebuilds the frontend with same-origin `/api` and `/health` routing, checks API readiness, and prints a random `trycloudflare.com` URL. Anyone with the URL can open the Auran sign-in page; share test account credentials only with the intended developers. Press Ctrl+C to stop sharing. If the tunnel was started separately in detached Docker mode, run `docker compose -f docker-compose.yml -f docker-compose.share.yml --profile share stop share` to stop it. The URL also stops working if the laptop, Docker, or tunnel stops; a later run gets a new URL. The backend and SQL Server host ports remain bound to localhost. Use only synthetic test data and test accounts. This is a temporary development link, not production hosting. The [Cloudflare Quick Tunnel documentation](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) describes the URL lifetime.
+
 Prerequisites:
 
 - .NET 10 SDK
