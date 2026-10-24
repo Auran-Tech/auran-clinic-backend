@@ -6,9 +6,13 @@ public sealed record DashboardSummaryResponse(
     int VisitsToday,
     int ActiveQueue,
     int CompletedVisitsToday,
+    int CompletedVisitsStartedToday,
     int PendingDocumentation,
     int FollowUpsToday,
-    int OverdueFollowUps);
+    int OverdueFollowUps,
+    IReadOnlyList<DashboardDailyVisitsResponse> WeeklyVisits);
+
+public sealed record DashboardDailyVisitsResponse(DateOnly LocalDate, int Count);
 
 public sealed class VisitReportQuery
 {

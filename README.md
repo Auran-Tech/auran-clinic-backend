@@ -184,6 +184,8 @@ From this backend directory, with the frontend checkout beside it:
 
 The frontend Nginx image supports an internal `/api` proxy; this local Compose build points the browser directly at `127.0.0.1:5085` for the existing live-stack tests. Host ports are bound to localhost: frontend `4173`, API `5085`, SQL Server `14330`. `docker compose down` stops the stack and retains SQL and uploads; `docker compose down -v` removes both volumes and all test data. Use synthetic data only. This is a local Development setup, not a production deployment.
 
+For a fuller dashboard in a disposable Cairo-timezone clinic, run the frontend's `scripts/seed-local-demo.mjs` with the local clinic administrator credentials, then run `scripts/seed-dashboard-history.ps1 -ConfirmLocal` with the same `AURAN_DEMO_EMAIL` and `AURAN_DEMO_PASSWORD` variables. The second script uses the local Docker SQL container and adds 36 deterministic completed visit fixtures across the previous six clinic-local days. It only updates its own fixture IDs on rerun. These historical rows support dashboard/reporting display; use API-created demo visits for workflow testing.
+
 ### Share the running local MVP with developers
 
 Start the Docker MVP stack above first. Keep Docker Desktop and this laptop running. From this backend directory in PowerShell, start a public temporary link:

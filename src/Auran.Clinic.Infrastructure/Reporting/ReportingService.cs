@@ -233,6 +233,12 @@ public sealed class ReportingService(
             .CountAsync(
                 visit => visit.CompletedAtUtc >= startUtc && visit.CompletedAtUtc < endUtc,
                 cancellationToken);
+        var completedVisitsStartedToday = await dbContext.Visits.AsNoTracking()
+            .CountAsync(
+                visit => visit.EntryAtUtc >= startUtc &&
+                         visit.EntryAtUtc < endUtc &&
+                         visit.CompletedAtUtc != null,
+                cancellationToken);
         var pendingDocumentation = await dbContext.Visits.AsNoTracking()
             .CountAsync(
                 visit => visit.DocumentationStatus == DocumentationStatus.Draft ||
@@ -251,15 +257,33 @@ public sealed class ReportingService(
                     item.RecommendedDate < today,
                 cancellationToken);
 
+        var timeZone = await GetClinicTimeZoneAsync(cancellationToken);
+        var weeklyVisits = new List<DashboardDailyVisitsResponse>(7);
+        for (var offset = -6; offset < 0; offset++)
+        {
+            var day = today.AddDays(offset);
+            var dayStartUtc = ConvertLocalStartToUtc(day, timeZone);
+            var nextDayStartUtc = ConvertLocalStartToUtc(day.AddDays(1), timeZone);
+            var count = await dbContext.Visits.AsNoTracking()
+                .CountAsync(
+                    visit => visit.EntryAtUtc >= dayStartUtc &&
+                             visit.EntryAtUtc < nextDayStartUtc,
+                    cancellationToken);
+            weeklyVisits.Add(new DashboardDailyVisitsResponse(day, count));
+        }
+        weeklyVisits.Add(new DashboardDailyVisitsResponse(today, visitsToday));
+
         return new DashboardSummaryResponse(
             today,
             totalPatients,
             visitsToday,
             activeQueue,
             completedVisitsToday,
+            completedVisitsStartedToday,
             pendingDocumentation,
             followUpsToday,
-            overdueFollowUps);
+            overdueFollowUps,
+            weeklyVisits);
     }
 
     public async Task<VisitReportResponse> GetVisitReportAsync(
