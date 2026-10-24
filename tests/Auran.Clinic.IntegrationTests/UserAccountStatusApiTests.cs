@@ -18,6 +18,204 @@ namespace Auran.Clinic.IntegrationTests;
 public sealed class UserAccountStatusApiTests
 {
     [Fact]
+    public async Task ProfilePhoto_IsScopedToCurrentUserAndCanBeRemoved()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateAccountAsync(factory, clinicId);
+        var another = await CreateAccountAsync(factory, clinicId);
+        using var client = factory.CreateClient();
+        using var anotherClient = factory.CreateClient();
+        await AuthenticateAsync(client, account.Credentials);
+        await AuthenticateAsync(anotherClient, another.Credentials);
+
+        var image = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XubcAAAAASUVORK5CYII=");
+        using var form = new MultipartFormDataContent();
+        using var content = new ByteArrayContent(image);
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(content, "file", "photo.png");
+
+        var uploaded = await client.PostAsync("/api/users/me/photo", form);
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+
+        var photoResponse = await client.GetAsync("/api/users/me/photo");
+        Assert.Equal(HttpStatusCode.OK, photoResponse.StatusCode);
+        Assert.Equal(image, await photoResponse.Content.ReadAsByteArrayAsync());
+        Assert.Equal("image/png", photoResponse.Content.Headers.ContentType?.MediaType);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await anotherClient.GetAsync("/api/users/me/photo")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.DeleteAsync("/api/users/me/photo")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync("/api/users/me/photo")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ProfilePhoto_RejectsSvgContent()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateAccountAsync(factory, clinicId);
+        using var client = factory.CreateClient();
+        await AuthenticateAsync(client, account.Credentials);
+
+        using var form = new MultipartFormDataContent();
+        using var content = new ByteArrayContent("<svg></svg>"u8.ToArray());
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/svg+xml");
+        form.Add(content, "file", "photo.svg");
+
+        var response = await client.PostAsync("/api/users/me/photo", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync("/api/users/me/photo")).StatusCode);
+    }
+
+    [Fact]
+    public async Task CurrentProfile_RegularUserCanReadAndUpdateOwnDetails()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateAccountAsync(factory, clinicId);
+        using var client = factory.CreateClient();
+        await AuthenticateAsync(client, account.Credentials);
+
+        var getResponse = await client.GetAsync("/api/users/me");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var original = await getResponse.Content.ReadFromJsonAsync<BaseResponse<UserAccountResponse>>();
+        Assert.Equal(account.UserId, original?.Data?.Id);
+
+        var newEmail = $"profile-{Guid.NewGuid():N}@auran.local";
+        var updateResponse = await client.PutAsJsonAsync("/api/users/me", new
+        {
+            fullName = "Updated Profile Name",
+            email = newEmail
+        });
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<BaseResponse<UserAccountResponse>>();
+        Assert.Equal(account.UserId, updated?.Data?.Id);
+        Assert.Equal("Updated Profile Name", updated?.Data?.FullName);
+        Assert.Equal(newEmail, updated?.Data?.Email);
+
+        using var loginClient = factory.CreateClient();
+        var loginResponse = await loginClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = newEmail,
+            Password = account.Credentials.Password
+        });
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangeOwnPassword_RequiresCurrentPasswordAndRevokesOldSession()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var account = await CreateAccountAsync(factory, clinicId);
+        using var client = factory.CreateClient();
+        await AuthenticateAsync(client, account.Credentials);
+
+        var invalid = await client.PostAsJsonAsync("/api/users/me/password", new
+        {
+            currentPassword = "Incorrect1",
+            newPassword = "ChangedPassword1"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.True(await HasUnrevokedSessionAsync(factory, account.UserId));
+
+        var changed = await client.PostAsJsonAsync("/api/users/me/password", new
+        {
+            currentPassword = account.Credentials.Password,
+            newPassword = "ChangedPassword1"
+        });
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.False(await HasUnrevokedSessionAsync(factory, account.UserId));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users/me")).StatusCode);
+
+        using var loginClient = factory.CreateClient();
+        var loginResponse = await loginClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = account.Credentials.Email,
+            Password = "ChangedPassword1"
+        });
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task OwnSessions_CannotRevokeAnotherUsersSession()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var caller = await CreateAccountAsync(factory, clinicId);
+        var other = await CreateAccountAsync(factory, clinicId);
+        using var callerClient = factory.CreateClient();
+        using var otherClient = factory.CreateClient();
+        await AuthenticateAsync(callerClient, caller.Credentials);
+        await AuthenticateAsync(otherClient, other.Credentials);
+
+        var callerSessions = await callerClient.GetFromJsonAsync<BaseResponse<List<OwnSessionResponse>>>(
+            "/api/users/me/sessions");
+        var otherSessions = await otherClient.GetFromJsonAsync<BaseResponse<List<OwnSessionResponse>>>(
+            "/api/users/me/sessions");
+        var own = Assert.Single(callerSessions!.Data!);
+        var otherSession = Assert.Single(otherSessions!.Data!);
+        Assert.True(own.IsCurrent);
+
+        var forbiddenTarget = await callerClient.PostAsJsonAsync(
+            "/api/users/me/sessions/revoke", new { sessionId = otherSession.Id });
+        Assert.Equal(HttpStatusCode.NotFound, forbiddenTarget.StatusCode);
+        Assert.True(await HasUnrevokedSessionAsync(factory, other.UserId));
+
+        var revoked = await callerClient.PostAsJsonAsync(
+            "/api/users/me/sessions/revoke", new { sessionId = own.Id });
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        Assert.False(await HasUnrevokedSessionAsync(factory, caller.UserId));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await callerClient.GetAsync("/api/users/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task OwnSessions_HaveRealSignInDates_AndRevokeAllOnlyAffectsCaller()
+    {
+        await using var factory = new ApiFactory();
+        var clinicId = await CreateClinicAsync(factory);
+        var caller = await CreateAccountAsync(factory, clinicId);
+        var other = await CreateAccountAsync(factory, clinicId);
+        using var firstClient = factory.CreateClient();
+        using var secondClient = factory.CreateClient();
+        using var otherClient = factory.CreateClient();
+        var firstSession = await AuthenticateAsync(firstClient, caller.Credentials);
+        var secondSession = await AuthenticateAsync(secondClient, caller.Credentials);
+        await AuthenticateAsync(otherClient, other.Credentials);
+
+        var listed = await firstClient.GetFromJsonAsync<BaseResponse<List<OwnSessionResponse>>>(
+            "/api/users/me/sessions");
+        Assert.Equal(2, listed?.Data?.Count);
+        Assert.All(listed!.Data!, session =>
+            Assert.InRange(session.CreatedDate, DateTime.UtcNow.AddMinutes(-5), DateTime.UtcNow.AddMinutes(1)));
+        Assert.All(listed.Data!, session => Assert.Equal(DateTimeKind.Utc, session.CreatedDate.Kind));
+
+        var revoked = await firstClient.PostAsync("/api/users/me/sessions/revoke-all", null);
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        Assert.False(await HasUnrevokedSessionAsync(factory, caller.UserId));
+        Assert.True(await HasUnrevokedSessionAsync(factory, other.UserId));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await firstClient.GetAsync("/api/users/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await secondClient.GetAsync("/api/users/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await otherClient.GetAsync("/api/users/me")).StatusCode);
+
+        using var anonymousClient = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await anonymousClient.PostAsJsonAsync("/api/auth/refresh",
+                new RefreshTokenRequest { RefreshToken = firstSession.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await anonymousClient.PostAsJsonAsync("/api/auth/refresh",
+                new RefreshTokenRequest { RefreshToken = secondSession.RefreshToken })).StatusCode);
+    }
+
+    [Fact]
     public async Task SetStatus_WithoutManageStatusPermission_ReturnsForbidden()
     {
         await using var factory = new ApiFactory();

@@ -18,6 +18,261 @@ public sealed class UserAccountService(
     UserManager<ApplicationIdentityUser> userManager,
     IAuditService auditService) : IUserAccountService
 {
+    public async Task<UserAccountResponse?> GetCurrentAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return null;
+
+        var user = await dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == currentUserId, cancellationToken);
+        return user is null ? null : await MapUserAsync(user, cancellationToken);
+    }
+
+    public async Task<UserManagementResult> UpdateCurrentAsync(
+        UpdateCurrentProfileRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return new UserManagementResult(UserManagementOutcome.Unauthenticated);
+
+        var currentPhone = await dbContext.Users.AsNoTracking()
+            .Where(user => user.Id == currentUserId)
+            .Select(user => user.Phone)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return await UpdateAsync(currentUserId, new UpdateUserRequest
+        {
+            UserId = currentUserId,
+            FullName = request.FullName,
+            Email = request.Email,
+            Phone = currentPhone
+        }, cancellationToken);
+    }
+
+    public async Task<UserManagementResult> ChangeOwnPasswordAsync(
+        ChangeOwnPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return new UserManagementResult(UserManagementOutcome.Unauthenticated);
+
+        var user = await dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == currentUserId, cancellationToken);
+        if (user is null)
+            return new UserManagementResult(UserManagementOutcome.NotFound);
+
+        var identity = await userManager.FindByIdAsync(user.IdentityUserId);
+        if (identity is null || identity.AccountType != AccountType.Clinic)
+            return new UserManagementResult(UserManagementOutcome.NotFound);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var changed = await userManager.ChangePasswordAsync(
+                identity,
+                request.CurrentPassword,
+                request.NewPassword);
+            if (!changed.Succeeded)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new UserManagementResult(
+                    UserManagementOutcome.ValidationError,
+                    Error: "The current password or new password is invalid.");
+            }
+
+            var now = DateTime.UtcNow;
+            await dbContext.RefreshTokens
+                .Where(token => token.UserId == currentUserId && token.RevokedDate == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(token => token.RevokedDate, now),
+                    cancellationToken);
+            await auditService.WriteAsync(
+                "User.PasswordChanged",
+                nameof(User),
+                user.Id.ToString(),
+                new Dictionary<string, object?>(),
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new UserManagementResult(UserManagementOutcome.Success);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<IReadOnlyList<OwnSessionResponse>> ListOwnSessionsAsync(
+        Guid currentSessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return [];
+
+        var now = DateTime.UtcNow;
+        var sessions = await dbContext.RefreshTokens.AsNoTracking()
+            .Where(token =>
+                token.UserId == currentUserId &&
+                token.RevokedDate == null &&
+                token.ExpiresDate > now)
+            .OrderByDescending(token => token.Id == currentSessionId)
+            .ThenByDescending(token => token.CreatedDate)
+            .Select(token => new
+            {
+                token.Id,
+                token.CreatedDate,
+                token.ExpiresDate,
+                IsCurrent = token.Id == currentSessionId
+            })
+            .ToListAsync(cancellationToken);
+
+        return sessions.Select(token => new OwnSessionResponse(
+            token.Id,
+            DateTime.SpecifyKind(token.CreatedDate, DateTimeKind.Utc),
+            DateTime.SpecifyKind(token.ExpiresDate, DateTimeKind.Utc),
+            token.IsCurrent)).ToList();
+    }
+
+    public async Task<bool> RevokeOwnSessionAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return false;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var changed = await dbContext.RefreshTokens
+            .Where(token =>
+                token.Id == sessionId &&
+                token.UserId == currentUserId &&
+                token.RevokedDate == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(token => token.RevokedDate, now),
+                cancellationToken);
+        if (changed == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        await auditService.WriteAsync(
+            "User.SessionRevoked",
+            nameof(User),
+            currentUserId.ToString(),
+            new Dictionary<string, object?>(),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<int> RevokeAllOwnSessionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return 0;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var changed = await dbContext.RefreshTokens
+            .Where(token => token.UserId == currentUserId && token.RevokedDate == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(token => token.RevokedDate, now),
+                cancellationToken);
+
+        await auditService.WriteAsync(
+            "User.AllSessionsRevoked",
+            nameof(User),
+            currentUserId.ToString(),
+            new Dictionary<string, object?> { ["revokedCount"] = changed },
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return changed;
+    }
+
+    public async Task<(byte[] ImageData, string ContentType)?> GetOwnPhotoAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return null;
+
+        var photo = await dbContext.UserProfilePhotos.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.UserId == currentUserId, cancellationToken);
+        return photo is null ? null : (photo.ImageData, photo.ContentType);
+    }
+
+    public async Task<bool> SaveOwnPhotoAsync(
+        byte[] imageData,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out var clinicId))
+            return false;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var photo = await dbContext.UserProfilePhotos
+            .SingleOrDefaultAsync(item => item.UserId == currentUserId, cancellationToken);
+        var now = DateTime.UtcNow;
+        if (photo is null)
+        {
+            dbContext.UserProfilePhotos.Add(new UserProfilePhoto
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                UserId = currentUserId,
+                ImageData = imageData,
+                ContentType = contentType,
+                CreatedDate = now,
+                CreateByUserId = currentUserId
+            });
+        }
+        else
+        {
+            photo.ImageData = imageData;
+            photo.ContentType = contentType;
+            photo.UpdatedDate = now;
+            photo.UpdatedByUserId = currentUserId;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditService.WriteAsync(
+            "User.ProfilePhotoUpdated",
+            nameof(User),
+            currentUserId.ToString(),
+            new Dictionary<string, object?>(),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> DeleteOwnPhotoAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentActor(out var currentUserId, out _))
+            return false;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var photo = await dbContext.UserProfilePhotos
+            .SingleOrDefaultAsync(item => item.UserId == currentUserId, cancellationToken);
+        if (photo is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        dbContext.UserProfilePhotos.Remove(photo);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditService.WriteAsync(
+            "User.ProfilePhotoDeleted",
+            nameof(User),
+            currentUserId.ToString(),
+            new Dictionary<string, object?>(),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<IReadOnlyList<UserAccountResponse>> ListAsync(
         CancellationToken cancellationToken = default)
     {

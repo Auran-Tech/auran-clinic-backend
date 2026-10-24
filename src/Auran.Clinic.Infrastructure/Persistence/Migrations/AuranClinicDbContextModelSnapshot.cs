@@ -1687,6 +1687,49 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Auran.Clinic.Domain.Entities.UserProfilePhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid?>("CreateByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("ImageData")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ClinicId");
+
+                    b.ToTable("UserProfilePhotos");
+                });
+
             modelBuilder.Entity("Auran.Clinic.Domain.Entities.UserRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2649,6 +2692,16 @@ namespace Auran.Clinic.Infrastructure.Persistence.Migrations
                         .HasForeignKey("Auran.Clinic.Domain.Entities.User", "IdentityUserId", "IdentityAccountType")
                         .HasPrincipalKey("Auran.Clinic.Infrastructure.Identity.ApplicationIdentityUser", "Id", "AccountType")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Auran.Clinic.Domain.Entities.UserProfilePhoto", b =>
+                {
+                    b.HasOne("Auran.Clinic.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "ClinicId")
+                        .HasPrincipalKey("Id", "ClinicId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

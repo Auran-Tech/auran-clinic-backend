@@ -168,7 +168,8 @@ public sealed class AuthService(
             cancellationToken);
 
         var sessionId = Guid.NewGuid();
-        var expiresDate = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
+        var now = DateTime.UtcNow;
+        var expiresDate = now.AddMinutes(_jwt.AccessTokenMinutes);
         var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var accessToken = CreateAccessToken(
             user,
@@ -184,7 +185,8 @@ public sealed class AuthService(
             ClinicId = user.ClinicId,
             UserId = user.Id,
             TokenHash = HashToken(rawRefreshToken),
-            ExpiresDate = DateTime.UtcNow.AddDays(_jwt.RefreshTokenDays)
+            CreatedDate = now,
+            ExpiresDate = now.AddDays(_jwt.RefreshTokenDays)
         });
 
         if (saveChanges)

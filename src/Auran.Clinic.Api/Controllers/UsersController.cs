@@ -1,12 +1,20 @@
 using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Application.Users;
+using Auran.Clinic.Api.Infrastructure;
 using FluentValidation;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace Auran.Clinic.Api.Controllers;
+
+public sealed class UploadOwnPhotoForm
+{
+    public required IFormFile File { get; init; }
+}
 
 [ApiController]
 [Authorize(Policy = ActorPolicies.Clinic)]
@@ -15,9 +23,180 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class UsersController(
     IUserAccountService userAccountService,
     IValidator<UpdateUserRequest> updateUserValidator,
+    IValidator<UpdateCurrentProfileRequest> updateCurrentProfileValidator,
+    IValidator<ChangeOwnPasswordRequest> changeOwnPasswordValidator,
+    IValidator<RevokeOwnSessionRequest> revokeOwnSessionValidator,
     IValidator<SetUserRolesRequest> setUserRolesValidator,
     IValidator<UpdateUserStatusRequest> updateUserStatusValidator) : ControllerBase
 {
+    [HttpGet("me")]
+    [SwaggerOperation(
+        Summary = "Get the authenticated clinic user's profile",
+        Description = "Returns the current clinic user's profile without requiring employee-management permission.",
+        OperationId = "Users_GetCurrent",
+        Tags = new[] { "Users" })]
+    public async Task<ActionResult<BaseResponse<UserAccountResponse>>> GetCurrent(
+        CancellationToken cancellationToken)
+    {
+        var user = await userAccountService.GetCurrentAsync(cancellationToken);
+        return user is null
+            ? NotFound(new BaseResponse { Status = false, Message = "User not found." })
+            : Ok(new BaseResponse<UserAccountResponse> { Status = true, Data = user });
+    }
+
+    [HttpPut("me")]
+    [SwaggerOperation(
+        Summary = "Update the authenticated clinic user's profile",
+        Description = "Updates only the current clinic user's name and email. The user ID is taken from the authenticated session.",
+        OperationId = "Users_UpdateCurrent",
+        Tags = new[] { "Users" })]
+    public async Task<ActionResult<BaseResponse<UserAccountResponse>>> UpdateCurrent(
+        [FromBody] UpdateCurrentProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await updateCurrentProfileValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return ValidationFailure<UserAccountResponse>();
+
+        return MapManagementResult(await userAccountService.UpdateCurrentAsync(request, cancellationToken));
+    }
+
+    [HttpPost("me/password")]
+    [EnableRateLimiting(ApiSecurityPolicies.LoginRateLimit)]
+    [SwaggerOperation(
+        Summary = "Change the authenticated clinic user's password",
+        Description = "Requires the current password and revokes all clinic sessions after success. The user must sign in again.",
+        OperationId = "Users_ChangeOwnPassword",
+        Tags = new[] { "Users", "Authentication" })]
+    public async Task<ActionResult<BaseResponse>> ChangeOwnPassword(
+        [FromBody] ChangeOwnPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await changeOwnPasswordValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+
+        var result = await userAccountService.ChangeOwnPasswordAsync(request, cancellationToken);
+        return result.Outcome switch
+        {
+            UserManagementOutcome.Success => Ok(new BaseResponse { Status = true }),
+            UserManagementOutcome.ValidationError => BadRequest(new BaseResponse
+            {
+                Status = false,
+                Error = "validation_error",
+                Message = result.Error ?? "Unable to change password."
+            }),
+            UserManagementOutcome.NotFound => NotFound(new BaseResponse { Status = false }),
+            _ => Unauthorized(new BaseResponse { Status = false })
+        };
+    }
+
+    [HttpGet("me/sessions")]
+    [SwaggerOperation(
+        Summary = "List the authenticated clinic user's active sessions",
+        OperationId = "Users_ListOwnSessions",
+        Tags = new[] { "Users", "Authentication" })]
+    public async Task<ActionResult<BaseResponse<IReadOnlyList<OwnSessionResponse>>>> ListOwnSessions(
+        CancellationToken cancellationToken)
+    {
+        Guid.TryParse(User.FindFirstValue("session_id"), out var currentSessionId);
+        var sessions = await userAccountService.ListOwnSessionsAsync(currentSessionId, cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<OwnSessionResponse>>
+        {
+            Status = true,
+            Data = sessions
+        });
+    }
+
+    [HttpPost("me/sessions/revoke")]
+    [SwaggerOperation(
+        Summary = "Revoke one of the authenticated clinic user's sessions",
+        OperationId = "Users_RevokeOwnSession",
+        Tags = new[] { "Users", "Authentication" })]
+    public async Task<ActionResult<BaseResponse>> RevokeOwnSession(
+        [FromBody] RevokeOwnSessionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await revokeOwnSessionValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(new BaseResponse { Status = false, Error = "validation_error" });
+
+        var revoked = await userAccountService.RevokeOwnSessionAsync(
+            request.SessionId, cancellationToken);
+        return revoked
+            ? Ok(new BaseResponse { Status = true })
+            : NotFound(new BaseResponse { Status = false, Message = "Session not found." });
+    }
+
+    [HttpPost("me/sessions/revoke-all")]
+    [SwaggerOperation(
+        Summary = "Revoke every session owned by the authenticated clinic user",
+        Description = "Includes the current session, so the user must sign in again.",
+        OperationId = "Users_RevokeAllOwnSessions",
+        Tags = new[] { "Users", "Authentication" })]
+    public async Task<ActionResult<BaseResponse>> RevokeAllOwnSessions(
+        CancellationToken cancellationToken)
+    {
+        await userAccountService.RevokeAllOwnSessionsAsync(cancellationToken);
+        return Ok(new BaseResponse { Status = true });
+    }
+
+    [HttpGet("me/photo")]
+    [SwaggerOperation(
+        Summary = "Get the authenticated clinic user's profile photo",
+        OperationId = "Users_GetOwnPhoto",
+        Tags = new[] { "Users" })]
+    public async Task<IActionResult> GetOwnPhoto(CancellationToken cancellationToken)
+    {
+        var photo = await userAccountService.GetOwnPhotoAsync(cancellationToken);
+        return photo is null
+            ? NotFound()
+            : File(photo.Value.ImageData, photo.Value.ContentType);
+    }
+
+    [HttpPost("me/photo")]
+    [RequestSizeLimit(ProfileImageValidator.MaxBytes + 1024)]
+    [Consumes("multipart/form-data")]
+    [SwaggerOperation(
+        Summary = "Upload the authenticated clinic user's profile photo",
+        Description = "Accepts JPEG, PNG, or WebP images up to 2 MB.",
+        OperationId = "Users_UploadOwnPhoto",
+        Tags = new[] { "Users" })]
+    public async Task<ActionResult<BaseResponse>> UploadOwnPhoto(
+        [FromForm] UploadOwnPhotoForm request,
+        CancellationToken cancellationToken)
+    {
+        var file = request.File;
+        if (file.Length <= 0 || file.Length > ProfileImageValidator.MaxBytes)
+            return BadRequest(new BaseResponse { Status = false, Error = "invalid_profile_image" });
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        var image = buffer.ToArray();
+        if (!ProfileImageValidator.IsValid(image, file.ContentType))
+            return BadRequest(new BaseResponse { Status = false, Error = "invalid_profile_image" });
+
+        var saved = await userAccountService.SaveOwnPhotoAsync(
+            image, file.ContentType, cancellationToken);
+        return saved
+            ? Ok(new BaseResponse { Status = true })
+            : NotFound(new BaseResponse { Status = false });
+    }
+
+    [HttpDelete("me/photo")]
+    [SwaggerOperation(
+        Summary = "Remove the authenticated clinic user's profile photo",
+        OperationId = "Users_DeleteOwnPhoto",
+        Tags = new[] { "Users" })]
+    public async Task<ActionResult<BaseResponse>> DeleteOwnPhoto(CancellationToken cancellationToken)
+    {
+        var removed = await userAccountService.DeleteOwnPhotoAsync(cancellationToken);
+        return removed
+            ? Ok(new BaseResponse { Status = true })
+            : NotFound(new BaseResponse { Status = false });
+    }
+
     [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Users.View)]
     [SwaggerOperation(
