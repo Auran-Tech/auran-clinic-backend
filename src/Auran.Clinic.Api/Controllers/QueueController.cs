@@ -14,19 +14,31 @@ namespace Auran.Clinic.Api.Controllers;
 [Produces("application/json")]
 public sealed class QueueController(
     IQueueService queueService,
+    IValidator<QueueQuery> queryValidator,
     IValidator<MoveQueueEntryRequest> moveValidator) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Queue.View)]
     [SwaggerOperation(
         Summary = "List active clinic queue",
-        Description = "Returns non-exited queue entries for the authenticated clinic ordered by workflow stage and entry time.",
+        Description = "Returns active clinic queue entries with validated server sorting. includeRecentExits=true also returns entries exited in the last 24 hours.",
         OperationId = "Queue_ListActive",
         Tags = new[] { "Queue" })]
     public async Task<ActionResult<BaseResponse<IReadOnlyList<QueueEntryResponse>>>> List(
+        [FromQuery] QueueQuery query,
         CancellationToken cancellationToken)
     {
-        var data = await queueService.ListActiveAsync(cancellationToken);
+        var validation = await queryValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new BaseResponse<IReadOnlyList<QueueEntryResponse>>
+            {
+                Status = false,
+                Error = "validation_error"
+            });
+        }
+
+        var data = await queueService.ListActiveAsync(query, cancellationToken);
         return Ok(new BaseResponse<IReadOnlyList<QueueEntryResponse>>
         {
             Status = true,

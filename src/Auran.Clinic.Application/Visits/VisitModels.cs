@@ -1,5 +1,7 @@
 namespace Auran.Clinic.Application.Visits;
 
+public sealed record VisitDoctorOptionResponse(Guid Id, string FullName);
+
 public sealed class StartVisitRequest
 {
     public Guid PatientId { get; init; }

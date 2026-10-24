@@ -1,5 +1,12 @@
 namespace Auran.Clinic.Application.Queue;
 
+public sealed class QueueQuery
+{
+    public string SortBy { get; init; } = QueueListOptions.Stage;
+    public bool Descending { get; init; }
+    public bool IncludeRecentExits { get; init; }
+}
+
 public sealed record QueueEntryResponse(
     Guid QueueEntryId,
     Guid VisitId,

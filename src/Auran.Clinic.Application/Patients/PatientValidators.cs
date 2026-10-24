@@ -9,6 +9,10 @@ public sealed class PatientQueryValidator : AbstractValidator<PatientQuery>
         RuleFor(x => x.Page).GreaterThan(0);
         RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
         RuleFor(x => x.Search).MaximumLength(256);
+        RuleFor(x => x.Gender)
+            .Must(value => value is null || PatientListOptions.GenderValues.Contains(value));
+        RuleFor(x => x.SortBy)
+            .Must(PatientListOptions.SortFields.Contains);
     }
 }
 

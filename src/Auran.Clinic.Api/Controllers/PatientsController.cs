@@ -22,7 +22,7 @@ public sealed class PatientsController(
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Patients.View)]
     [SwaggerOperation(
         Summary = "List clinic patients",
-        Description = "Returns a tenant-scoped paginated patient list. Search matches name, phone, or patient number.",
+        Description = "Returns a tenant-scoped paginated patient list with search, gender filter, and validated server sorting.",
         OperationId = "Patients_List",
         Tags = new[] { "Patients" })]
     public async Task<ActionResult<BaseResponse<PaginatedResponse<PatientResponse>>>> List(

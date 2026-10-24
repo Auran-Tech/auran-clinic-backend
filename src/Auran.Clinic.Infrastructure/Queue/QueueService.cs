@@ -14,32 +14,51 @@ public sealed class QueueService(
     IAuditService auditService) : IQueueService
 {
     public async Task<IReadOnlyList<QueueEntryResponse>> ListActiveAsync(
+        QueueQuery options,
         CancellationToken cancellationToken = default)
     {
+        var recentExitCutoff = DateTime.UtcNow - QueueListOptions.RecentExitWindow;
         var query =
             from queue in dbContext.QueueEntries.AsNoTracking()
             join patient in dbContext.Patients.AsNoTracking() on queue.PatientId equals patient.Id
             join status in dbContext.WorkflowStatuses.AsNoTracking() on queue.WorkflowStatusId equals status.Id
             join doctor in dbContext.Users.AsNoTracking() on queue.DoctorId equals doctor.Id into doctors
             from doctor in doctors.DefaultIfEmpty()
-            where queue.ExitAtUtc == null
-            orderby status.SortOrder, queue.EntryAtUtc
-            select new QueueEntryResponse(
-                queue.Id,
-                queue.VisitId,
-                queue.PatientId,
-                patient.PatientNumber,
-                patient.FullName,
-                queue.DoctorId,
-                doctor != null ? doctor.FullName : null,
-                status.Id,
-                status.Code,
-                status.Name,
-                status.Color,
-                queue.EntryAtUtc,
-                queue.ExitAtUtc);
+            where queue.ExitAtUtc == null ||
+                (options.IncludeRecentExits && queue.ExitAtUtc >= recentExitCutoff)
+            select new { queue, patient, status, doctor };
 
-        return await query.ToListAsync(cancellationToken);
+        var ordered = (options.SortBy, options.Descending) switch
+        {
+            (QueueListOptions.Arrival, true) => query.OrderByDescending(item => item.queue.EntryAtUtc),
+            (QueueListOptions.Arrival, false) => query.OrderBy(item => item.queue.EntryAtUtc),
+            (QueueListOptions.PatientName, true) => query.OrderByDescending(item => item.patient.FullName),
+            (QueueListOptions.PatientName, false) => query.OrderBy(item => item.patient.FullName),
+            (QueueListOptions.DoctorName, true) => query.OrderByDescending(item => item.doctor!.FullName),
+            (QueueListOptions.DoctorName, false) => query.OrderBy(item => item.doctor!.FullName),
+            (QueueListOptions.Stage, true) => query.OrderByDescending(item => item.status.SortOrder)
+                .ThenByDescending(item => item.queue.EntryAtUtc),
+            _ => query.OrderBy(item => item.status.SortOrder)
+                .ThenBy(item => item.queue.EntryAtUtc)
+        };
+
+        return await ordered
+            .ThenBy(item => item.queue.Id)
+            .Select(item => new QueueEntryResponse(
+                item.queue.Id,
+                item.queue.VisitId,
+                item.queue.PatientId,
+                item.patient.PatientNumber,
+                item.patient.FullName,
+                item.queue.DoctorId,
+                item.doctor != null ? item.doctor.FullName : null,
+                item.status.Id,
+                item.status.Code,
+                item.status.Name,
+                item.status.Color,
+                item.queue.EntryAtUtc,
+                item.queue.ExitAtUtc))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<QueueTransitionOptionResponse>> GetAvailableTransitionsAsync(

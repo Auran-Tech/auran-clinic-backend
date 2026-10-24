@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Auditing;
+using Auran.Clinic.Application.Authorization;
 using Auran.Clinic.Application.Models;
 using Auran.Clinic.Application.Visits;
 using Auran.Clinic.Domain.Entities;
@@ -16,6 +17,19 @@ public sealed class VisitService(
     ICurrentUserContext currentUserContext,
     IAuditService auditService) : IVisitService
 {
+    public async Task<IReadOnlyList<VisitDoctorOptionResponse>> ListAvailableDoctorsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Users.AsNoTracking()
+            .Where(user => user.IsActive && dbContext.UserRoles.Any(userRole =>
+                userRole.UserId == user.Id && dbContext.Roles.Any(role =>
+                    role.Id == userRole.RoleId && role.Code == SystemRoleCatalog.Doctor)))
+            .OrderBy(user => user.FullName)
+            .ThenBy(user => user.Id)
+            .Select(user => new VisitDoctorOptionResponse(user.Id, user.FullName))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<VisitStartResult> StartAsync(
         StartVisitRequest request,
         CancellationToken cancellationToken = default)

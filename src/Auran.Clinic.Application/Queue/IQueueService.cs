@@ -3,6 +3,7 @@ namespace Auran.Clinic.Application.Queue;
 public interface IQueueService
 {
     Task<IReadOnlyList<QueueEntryResponse>> ListActiveAsync(
+        QueueQuery query,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<QueueTransitionOptionResponse>> GetAvailableTransitionsAsync(

@@ -33,10 +33,27 @@ public sealed class PatientService(
                 patient.PatientNumber.Contains(search));
         }
 
+        if (query.Gender is PatientListOptions.Male or PatientListOptions.Female)
+            patients = patients.Where(patient => patient.Gender == query.Gender);
+        else if (query.Gender == PatientListOptions.Unspecified)
+            patients = patients.Where(patient => patient.Gender == null || patient.Gender == "");
+
         var totalCount = await patients.CountAsync(cancellationToken);
-        var data = await patients
-            .OrderBy(patient => patient.FullName)
-            .ThenBy(patient => patient.PatientNumber)
+        var ordered = (query.SortBy, query.Descending) switch
+        {
+            (PatientListOptions.PatientNumber, true) => patients.OrderByDescending(patient => patient.PatientNumber),
+            (PatientListOptions.PatientNumber, false) => patients.OrderBy(patient => patient.PatientNumber),
+            (PatientListOptions.Phone, true) => patients.OrderByDescending(patient => patient.Phone),
+            (PatientListOptions.Phone, false) => patients.OrderBy(patient => patient.Phone),
+            (PatientListOptions.Gender, true) => patients.OrderByDescending(patient => patient.Gender),
+            (PatientListOptions.Gender, false) => patients.OrderBy(patient => patient.Gender),
+            (PatientListOptions.CreatedDate, true) => patients.OrderByDescending(patient => patient.CreatedDate),
+            (PatientListOptions.CreatedDate, false) => patients.OrderBy(patient => patient.CreatedDate),
+            (_, true) => patients.OrderByDescending(patient => patient.FullName),
+            _ => patients.OrderBy(patient => patient.FullName)
+        };
+        var data = await ordered
+            .ThenBy(patient => patient.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(patient => new PatientResponse(

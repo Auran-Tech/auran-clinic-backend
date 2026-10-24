@@ -17,6 +17,24 @@ public sealed class VisitsController(
     IValidator<StartVisitRequest> startValidator,
     IValidator<PatientVisitHistoryQuery> historyValidator) : ControllerBase
 {
+    [HttpGet("doctors")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Start)]
+    [SwaggerOperation(
+        Summary = "List doctors available for a new visit",
+        Description = "Returns active doctors in the authenticated clinic for visit check-in.",
+        OperationId = "Visits_ListAvailableDoctors",
+        Tags = new[] { "Visits" })]
+    public async Task<ActionResult<BaseResponse<IReadOnlyList<VisitDoctorOptionResponse>>>> Doctors(
+        CancellationToken cancellationToken)
+    {
+        var doctors = await visitService.ListAvailableDoctorsAsync(cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<VisitDoctorOptionResponse>>
+        {
+            Status = true,
+            Data = doctors
+        });
+    }
+
     [HttpPost("start")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Start)]
     [SwaggerOperation(

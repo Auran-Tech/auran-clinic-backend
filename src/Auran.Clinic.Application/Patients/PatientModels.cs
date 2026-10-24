@@ -3,6 +3,9 @@ namespace Auran.Clinic.Application.Patients;
 public sealed class PatientQuery
 {
     public string? Search { get; init; }
+    public string? Gender { get; init; }
+    public string SortBy { get; init; } = PatientListOptions.Name;
+    public bool Descending { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }
