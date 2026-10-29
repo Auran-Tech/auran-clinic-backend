@@ -5,6 +5,8 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Auran.Clinic.Application.Visits;
+using Auran.Clinic.Application.Models;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Infrastructure.Identity;
 using Auran.Clinic.Infrastructure.Persistence;
@@ -102,6 +104,29 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
 
         Assert.Equal(HttpStatusCode.OK, own.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
+
+        var clinicVisitList = await client.GetAsync("/api/visits?page=1&pageSize=10");
+        Assert.Equal(HttpStatusCode.OK, clinicVisitList.StatusCode);
+        var visitList = await clinicVisitList.Content
+            .ReadFromJsonAsync<BaseResponse<VisitListResponse>>();
+        Assert.NotNull(visitList?.Data);
+        Assert.Contains(visitList.Data.Visits.Data, visit => visit.VisitId == visitA);
+        Assert.DoesNotContain(visitList.Data.Visits.Data, visit => visit.VisitId == visitB);
+        Assert.Equal(1, visitList.Data.Visits.Setting.TotalCount);
+
+        var foreignPatientNumber = "B" + patientB.ToString("N")[..12];
+        var foreignSearch = await client.GetFromJsonAsync<BaseResponse<VisitListResponse>>(
+            $"/api/visits?search={foreignPatientNumber}&sortBy=patientName&descending=false");
+        Assert.NotNull(foreignSearch?.Data);
+        Assert.Empty(foreignSearch.Data.Visits.Data);
+        Assert.Equal(0, foreignSearch.Data.Visits.Setting.TotalCount);
+
+        var visitDoctors = await client
+            .GetFromJsonAsync<BaseResponse<List<VisitDoctorOptionResponse>>>(
+                "/api/visits/list-doctors");
+        Assert.NotNull(visitDoctors?.Data);
+        Assert.Contains(visitDoctors.Data, doctor => doctor.Id == userId);
+        Assert.DoesNotContain(visitDoctors.Data, doctor => doctor.Id == doctorB);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId, "Patient_View"));
@@ -662,6 +687,10 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
             "Bearer", CreateToken(configuration, userId, clinicA, sessionId));
         var denied = await client.GetAsync($"/api/visits/history?patientId={patientA}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var listDenied = await client.GetAsync("/api/visits");
+        Assert.Equal(HttpStatusCode.Forbidden, listDenied.StatusCode);
+        var doctorsDenied = await client.GetAsync("/api/visits/list-doctors");
+        Assert.Equal(HttpStatusCode.Forbidden, doctorsDenied.StatusCode);
     }
 
     private static string CreateToken(

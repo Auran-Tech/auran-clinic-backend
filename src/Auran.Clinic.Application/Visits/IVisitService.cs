@@ -2,6 +2,13 @@ namespace Auran.Clinic.Application.Visits;
 
 public interface IVisitService
 {
+    Task<VisitListResponse> ListAsync(
+        VisitListQuery query,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<VisitDoctorOptionResponse>> ListVisitDoctorsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<VisitDoctorOptionResponse>> ListAvailableDoctorsAsync(
         CancellationToken cancellationToken = default);
 

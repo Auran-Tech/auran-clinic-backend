@@ -15,8 +15,56 @@ namespace Auran.Clinic.Api.Controllers;
 public sealed class VisitsController(
     IVisitService visitService,
     IValidator<StartVisitRequest> startValidator,
+    IValidator<VisitListQuery> listValidator,
     IValidator<PatientVisitHistoryQuery> historyValidator) : ControllerBase
 {
+    [HttpGet]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
+    [SwaggerOperation(
+        Summary = "List clinic visits",
+        Description = "Returns a tenant-scoped paged visit summary. Filters support patient search, doctor, visit/documentation status and UTC entry range.",
+        OperationId = "Visits_List",
+        Tags = new[] { "Visits" })]
+    public async Task<ActionResult<BaseResponse<VisitListResponse>>> List(
+        [FromQuery] VisitListQuery query,
+        CancellationToken cancellationToken)
+    {
+        var validation = await listValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new BaseResponse<VisitListResponse>
+            {
+                Status = false,
+                Error = "validation_error"
+            });
+        }
+
+        var visits = await visitService.ListAsync(query, cancellationToken);
+        return Ok(new BaseResponse<VisitListResponse>
+        {
+            Status = true,
+            Data = visits
+        });
+    }
+
+    [HttpGet("list-doctors")]
+    [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.View)]
+    [SwaggerOperation(
+        Summary = "List doctors with clinic visits",
+        Description = "Returns doctors found in the authenticated clinic's visit history for list filtering.",
+        OperationId = "Visits_ListDoctors",
+        Tags = new[] { "Visits" })]
+    public async Task<ActionResult<BaseResponse<IReadOnlyList<VisitDoctorOptionResponse>>>> ListDoctors(
+        CancellationToken cancellationToken)
+    {
+        var doctors = await visitService.ListVisitDoctorsAsync(cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<VisitDoctorOptionResponse>>
+        {
+            Status = true,
+            Data = doctors
+        });
+    }
+
     [HttpGet("doctors")]
     [Authorize(Policy = PermissionPolicy.Prefix + Permissions.Visits.Start)]
     [SwaggerOperation(

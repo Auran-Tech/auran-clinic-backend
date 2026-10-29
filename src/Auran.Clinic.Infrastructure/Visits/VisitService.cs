@@ -17,6 +17,123 @@ public sealed class VisitService(
     ICurrentUserContext currentUserContext,
     IAuditService auditService) : IVisitService
 {
+    public async Task<IReadOnlyList<VisitDoctorOptionResponse>> ListVisitDoctorsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+                from visit in dbContext.Visits.AsNoTracking()
+                join doctor in dbContext.Users.AsNoTracking()
+                    on visit.DoctorId equals doctor.Id
+                select new { doctor.Id, doctor.FullName })
+            .Distinct()
+            .OrderBy(doctor => doctor.FullName)
+            .ThenBy(doctor => doctor.Id)
+            .Select(doctor => new VisitDoctorOptionResponse(doctor.Id, doctor.FullName))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<VisitListResponse> ListAsync(
+        VisitListQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var visits =
+            from visit in dbContext.Visits.AsNoTracking()
+            join patient in dbContext.Patients.AsNoTracking()
+                on visit.PatientId equals patient.Id
+            join doctor in dbContext.Users.AsNoTracking()
+                on visit.DoctorId equals doctor.Id
+            select new
+            {
+                Visit = visit,
+                PatientName = patient.FullName,
+                patient.PatientNumber,
+                DoctorName = doctor.FullName
+            };
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            var isVisitId = Guid.TryParse(search, out var visitId);
+            visits = visits.Where(item =>
+                (isVisitId && item.Visit.Id == visitId) ||
+                item.PatientName.Contains(search) ||
+                item.PatientNumber.Contains(search));
+        }
+
+        if (query.DoctorId.HasValue)
+            visits = visits.Where(item => item.Visit.DoctorId == query.DoctorId.Value);
+        if (query.Status.HasValue)
+            visits = visits.Where(item => item.Visit.Status == query.Status.Value);
+        if (query.DocumentationStatus.HasValue)
+            visits = visits.Where(item =>
+                item.Visit.DocumentationStatus == query.DocumentationStatus.Value);
+        if (query.FromUtc.HasValue)
+            visits = visits.Where(item => item.Visit.EntryAtUtc >= query.FromUtc.Value);
+        if (query.ToUtc.HasValue)
+            visits = visits.Where(item => item.Visit.EntryAtUtc <= query.ToUtc.Value);
+
+        var totalCount = await visits.CountAsync(cancellationToken);
+
+        var sortBy = query.SortBy.ToLowerInvariant();
+        visits = (sortBy, query.Descending) switch
+        {
+            ("patientname", false) => visits.OrderBy(item => item.PatientName)
+                .ThenBy(item => item.Visit.Id),
+            ("patientname", true) => visits.OrderByDescending(item => item.PatientName)
+                .ThenBy(item => item.Visit.Id),
+            ("doctorname", false) => visits.OrderBy(item => item.DoctorName)
+                .ThenBy(item => item.Visit.Id),
+            ("doctorname", true) => visits.OrderByDescending(item => item.DoctorName)
+                .ThenBy(item => item.Visit.Id),
+            ("status", false) => visits.OrderBy(item => item.Visit.Status)
+                .ThenBy(item => item.Visit.Id),
+            ("status", true) => visits.OrderByDescending(item => item.Visit.Status)
+                .ThenBy(item => item.Visit.Id),
+            (_, false) => visits.OrderBy(item => item.Visit.EntryAtUtc)
+                .ThenBy(item => item.Visit.Id),
+            _ => visits.OrderByDescending(item => item.Visit.EntryAtUtc)
+                .ThenByDescending(item => item.Visit.Id)
+        };
+
+        var items = await visits
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(item => new VisitListItemResponse(
+                item.Visit.Id,
+                item.Visit.PatientId,
+                item.PatientNumber,
+                item.PatientName,
+                item.Visit.DoctorId,
+                item.DoctorName,
+                item.Visit.Status.ToString(),
+                item.Visit.DocumentationStatus.ToString(),
+                item.Visit.EntryAtUtc,
+                item.Visit.CompletedAtUtc,
+                item.Visit.ExitAtUtc))
+            .ToListAsync(cancellationToken);
+
+        var active = await dbContext.Visits.AsNoTracking()
+            .CountAsync(visit => visit.Status == VisitStatus.Open, cancellationToken);
+        var completed = await dbContext.Visits.AsNoTracking()
+            .CountAsync(visit => visit.Status == VisitStatus.Completed, cancellationToken);
+        var pendingDocumentation = await dbContext.Visits.AsNoTracking()
+            .CountAsync(visit =>
+                visit.DocumentationStatus == DocumentationStatus.Draft ||
+                visit.DocumentationStatus == DocumentationStatus.Pending,
+                cancellationToken);
+
+        return new VisitListResponse(new PaginatedResponse<VisitListItemResponse>
+        {
+            Data = items,
+            Setting = new PaginationInfo
+            {
+                TotalCount = totalCount,
+                RowCount = query.PageSize,
+                CurrentPage = query.Page
+            }
+        }, new VisitListSummaryResponse(active, completed, pendingDocumentation));
+    }
+
     public async Task<IReadOnlyList<VisitDoctorOptionResponse>> ListAvailableDoctorsAsync(
         CancellationToken cancellationToken = default)
     {
