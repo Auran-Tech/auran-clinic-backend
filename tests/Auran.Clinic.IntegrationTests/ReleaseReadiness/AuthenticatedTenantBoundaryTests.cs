@@ -41,9 +41,13 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         var patientA = Guid.NewGuid();
         var patientB = Guid.NewGuid();
         var identityId = Guid.NewGuid().ToString("N");
+        var clinicVisitDate = new DateOnly(2026, 10, 29);
+        var clinicVisitEntryUtc = TimeZoneInfo.ConvertTimeToUtc(
+            clinicVisitDate.ToDateTime(new TimeOnly(0, 30), DateTimeKind.Unspecified),
+            TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo"));
 
         db.Clinics.AddRange(
-            new Auran.Clinic.Domain.Entities.Clinic { Id = clinicA, Name = "Tenant test A", Code = "T" + clinicA.ToString("N")[..12] },
+            new Auran.Clinic.Domain.Entities.Clinic { Id = clinicA, Name = "Tenant test A", Code = "T" + clinicA.ToString("N")[..12], TimeZoneId = "Africa/Cairo" },
             new Auran.Clinic.Domain.Entities.Clinic { Id = clinicB, Name = "Tenant test B", Code = "T" + clinicB.ToString("N")[..12] });
         db.Set<ApplicationIdentityUser>().Add(new ApplicationIdentityUser
         {
@@ -82,7 +86,7 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         var visitA = Guid.NewGuid();
         var visitB = Guid.NewGuid();
         db.Visits.AddRange(
-            new Visit { Id = visitA, ClinicId = clinicA, PatientId = patientA, DoctorId = userId, EntryAtUtc = DateTime.UtcNow },
+            new Visit { Id = visitA, ClinicId = clinicA, PatientId = patientA, DoctorId = userId, EntryAtUtc = clinicVisitEntryUtc },
             new Visit { Id = visitB, ClinicId = clinicB, PatientId = patientB, DoctorId = doctorB, EntryAtUtc = DateTime.UtcNow });
         var fileA = Guid.NewGuid();
         var fileB = Guid.NewGuid();
@@ -113,6 +117,16 @@ public sealed class AuthenticatedTenantBoundaryTests : IClassFixture<WebApplicat
         Assert.Contains(visitList.Data.Visits.Data, visit => visit.VisitId == visitA);
         Assert.DoesNotContain(visitList.Data.Visits.Data, visit => visit.VisitId == visitB);
         Assert.Equal(1, visitList.Data.Visits.Setting.TotalCount);
+
+        var clinicDayVisits = await client.GetFromJsonAsync<BaseResponse<VisitListResponse>>(
+            $"/api/visits?fromDate={clinicVisitDate:yyyy-MM-dd}&toDate={clinicVisitDate:yyyy-MM-dd}");
+        Assert.NotNull(clinicDayVisits?.Data);
+        Assert.Contains(clinicDayVisits.Data.Visits.Data, visit => visit.VisitId == visitA);
+
+        var previousClinicDay = await client.GetFromJsonAsync<BaseResponse<VisitListResponse>>(
+            "/api/visits?toDate=2026-10-28");
+        Assert.NotNull(previousClinicDay?.Data);
+        Assert.DoesNotContain(previousClinicDay.Data.Visits.Data, visit => visit.VisitId == visitA);
 
         var foreignPatientNumber = "B" + patientB.ToString("N")[..12];
         var foreignSearch = await client.GetFromJsonAsync<BaseResponse<VisitListResponse>>(

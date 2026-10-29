@@ -11,8 +11,8 @@ public sealed class VisitListQuery
     public Guid? DoctorId { get; init; }
     public VisitStatus? Status { get; init; }
     public DocumentationStatus? DocumentationStatus { get; init; }
-    public DateTime? FromUtc { get; init; }
-    public DateTime? ToUtc { get; init; }
+    public DateOnly? FromDate { get; init; }
+    public DateOnly? ToDate { get; init; }
     public string SortBy { get; init; } = "entryAtUtc";
     public bool Descending { get; init; } = true;
 }

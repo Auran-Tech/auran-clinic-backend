@@ -8,6 +8,7 @@ using Auran.Clinic.Application.Visits;
 using Auran.Clinic.Domain.Entities;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Persistence;
+using Auran.Clinic.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace Auran.Clinic.Infrastructure.Visits;
@@ -67,10 +68,22 @@ public sealed class VisitService(
         if (query.DocumentationStatus.HasValue)
             visits = visits.Where(item =>
                 item.Visit.DocumentationStatus == query.DocumentationStatus.Value);
-        if (query.FromUtc.HasValue)
-            visits = visits.Where(item => item.Visit.EntryAtUtc >= query.FromUtc.Value);
-        if (query.ToUtc.HasValue)
-            visits = visits.Where(item => item.Visit.EntryAtUtc <= query.ToUtc.Value);
+        if (query.FromDate.HasValue || query.ToDate.HasValue)
+        {
+            var timeZone = await ClinicLocalDate.GetTimeZoneAsync(
+                dbContext, currentUserContext, cancellationToken);
+            if (query.FromDate.HasValue)
+            {
+                var fromUtc = ClinicLocalDate.StartUtc(query.FromDate.Value, timeZone);
+                visits = visits.Where(item => item.Visit.EntryAtUtc >= fromUtc);
+            }
+            if (query.ToDate.HasValue)
+            {
+                var toExclusiveUtc = ClinicLocalDate.StartUtc(
+                    query.ToDate.Value.AddDays(1), timeZone);
+                visits = visits.Where(item => item.Visit.EntryAtUtc < toExclusiveUtc);
+            }
+        }
 
         var totalCount = await visits.CountAsync(cancellationToken);
 

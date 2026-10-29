@@ -14,15 +14,15 @@ public sealed class VisitListQueryValidatorTests
             Page = 0,
             PageSize = 100,
             SortBy = "clinicalNotes",
-            FromUtc = new DateTime(2026, 10, 29),
-            ToUtc = new DateTime(2026, 10, 28)
+            FromDate = new DateOnly(2026, 10, 29),
+            ToDate = new DateOnly(2026, 10, 28)
         });
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.PropertyName == "Page");
         Assert.Contains(result.Errors, error => error.PropertyName == "PageSize");
         Assert.Contains(result.Errors, error => error.PropertyName == "SortBy");
-        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("FromUtc"));
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("FromDate"));
     }
 
     [Fact]
@@ -39,5 +39,19 @@ public sealed class VisitListQueryValidatorTests
         });
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Rejects_last_calendar_date_before_exclusive_end_overflows()
+    {
+        var validator = new VisitListQueryValidator();
+
+        var result = validator.Validate(new VisitListQuery
+        {
+            ToDate = DateOnly.MaxValue
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == "ToDate");
     }
 }

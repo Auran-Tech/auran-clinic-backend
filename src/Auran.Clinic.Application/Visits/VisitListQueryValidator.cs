@@ -26,9 +26,12 @@ public sealed class VisitListQueryValidator : AbstractValidator<VisitListQuery>
                 ((long)query.Page - 1) * query.PageSize <= int.MaxValue)
             .WithMessage("Requested page exceeds the supported pagination range.");
         RuleFor(query => query).Must(query =>
-                !query.FromUtc.HasValue ||
-                !query.ToUtc.HasValue ||
-                query.FromUtc <= query.ToUtc)
-            .WithMessage("FromUtc must be before or equal to ToUtc.");
+                !query.FromDate.HasValue ||
+                !query.ToDate.HasValue ||
+                query.FromDate <= query.ToDate)
+            .WithMessage("FromDate must be before or equal to ToDate.");
+        RuleFor(query => query.ToDate)
+            .Must(value => !value.HasValue || value.Value < DateOnly.MaxValue)
+            .WithMessage("ToDate is outside the supported range.");
     }
 }

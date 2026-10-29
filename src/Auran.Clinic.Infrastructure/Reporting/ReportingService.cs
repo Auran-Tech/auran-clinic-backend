@@ -4,6 +4,7 @@ using Auran.Clinic.Application.Abstractions;
 using Auran.Clinic.Application.Reporting;
 using Auran.Clinic.Domain.Enums;
 using Auran.Clinic.Infrastructure.Persistence;
+using Auran.Clinic.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace Auran.Clinic.Infrastructure.Reporting;
@@ -410,37 +411,11 @@ public sealed class ReportingService(
     }
 
     private async Task<TimeZoneInfo> GetClinicTimeZoneAsync(CancellationToken cancellationToken)
-    {
-        if (!currentUserContext.IsAuthenticated || currentUserContext.ClinicId is not Guid clinicId)
-            return TimeZoneInfo.Utc;
-
-        var timeZoneId = await dbContext.Clinics.AsNoTracking()
-            .Where(clinic => clinic.Id == clinicId)
-            .Select(clinic => clinic.TimeZoneId)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-            return TimeZoneInfo.Utc;
-
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return TimeZoneInfo.Utc;
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return TimeZoneInfo.Utc;
-        }
-    }
+        => await ClinicLocalDate.GetTimeZoneAsync(
+            dbContext, currentUserContext, cancellationToken);
 
     private static DateTime ConvertLocalStartToUtc(DateOnly date, TimeZoneInfo timeZone)
-    {
-        var local = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        return TimeZoneInfo.ConvertTimeToUtc(local, timeZone);
-    }
+        => ClinicLocalDate.StartUtc(date, timeZone);
 
     private static string Escape(string? value)
     {
